@@ -84,7 +84,8 @@
 
 ### 遇到的問題
 - 目前環境沒有 `OPENAI_API_KEY`，且 `.env` 不存在，因此無法執行真實 OpenAI API 驗收；已用 mock 測試覆蓋 schema、retry 與 UI 流程。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `1382235 feat: add round one debate generation`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 4：實作第二輪反駁並接上 web search，要求雙方各 2 個 rebuttals，且所有論點與反駁都附真實可點擊來源。
