@@ -55,7 +55,8 @@
 ### 遇到的問題
 - 新增 yfinance 時需要網路下載依賴，已依規則用升級權限完成。
 - yfinance 對無效 ticker 會在 stderr/logger 額外輸出 Yahoo 錯誤；API response 已包裝成友善錯誤，不把原始錯誤暴露給前端。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `5c61e6a feat: add ticker validation`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 3：實作 F2 第一輪辯論，先不接 web search，用模型知識跑通 Bull/Bear 各 3 個符合 schema 的論點。
