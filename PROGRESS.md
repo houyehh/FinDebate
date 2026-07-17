@@ -23,7 +23,8 @@
 ### 遇到的問題
 - pip 與 npm 初次安裝套件時被網路 sandbox 擋住，已依規則用升級權限完成安裝。
 - Vite/Vitest 在 Windows sandbox 中讀取 Node resolution path 會被攔，前端測試與 build 使用升級權限執行後通過。
-- 目前尚未提供 GitHub remote URL，因此無法 push；已保留本地 Git repository。
+- 已建立本地 commit `97356a6 chore: scaffold healthcheck app`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 2：實作 F1 標的驗證，使用 yfinance 驗證 `NVDA`、`2330.TW`、`BTC-USD` 並處理無效 ticker 的友善錯誤。
