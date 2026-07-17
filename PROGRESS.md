@@ -60,3 +60,31 @@
 
 ### 下一步
 - 任務 3：實作 F2 第一輪辯論，先不接 web search，用模型知識跑通 Bull/Bear 各 3 個符合 schema 的論點。
+
+## 2026-07-18 任務 3：F2 第一輪辯論（先不接 web search）
+
+### 做了什麼
+- 依 OpenAI 官方 docs 確認 `gpt-5.6` alias、Responses API 與 Structured Outputs 支援狀態。
+- 新增 OpenAI SDK 依賴，並在 `.env.example` 加上 `OPENAI_MODEL=gpt-5.6`。
+- 新增第一輪辯論服務：Bull/Bear 各自獨立產生 3 個 opening claims，輸出固定 JSON schema。
+- 後端用 Pydantic 驗證模型輸出，schema 驗證失敗時自動重試 1 次。
+- 新增 `POST /api/debates/round-one`，輸入 ticker 後回傳 Bull/Bear 兩組第一輪論點與價格快照。
+- 前端加入「開始辯論」按鈕、生成 loading 狀態，以及 Bull/Bear 左右分欄開場卡片。
+
+### 關鍵決定
+- 任務 3 嚴格不接 web search；prompt 明確要求使用模型知識與既有價格快照。
+- OpenAI 呼叫使用 Responses API 的 `text.format` JSON schema，並在後端再次用 Pydantic 驗證。
+- 沒有 `OPENAI_API_KEY` 時，API 回傳 503 友善錯誤，不在前端白屏或洩漏秘密。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，5 passed。
+- `npm.cmd test`：通過，3 passed。
+- `npm.cmd run build`：通過。
+- Mock 驗收已確認輸入 `NVDA` 時，Bull 與 Bear 各回 3 個符合 schema 的論點。
+
+### 遇到的問題
+- 目前環境沒有 `OPENAI_API_KEY`，且 `.env` 不存在，因此無法執行真實 OpenAI API 驗收；已用 mock 測試覆蓋 schema、retry 與 UI 流程。
+- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+
+### 下一步
+- 任務 4：實作第二輪反駁並接上 web search，要求雙方各 2 個 rebuttals，且所有論點與反駁都附真實可點擊來源。

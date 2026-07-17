@@ -73,6 +73,9 @@ function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [lookupState, setLookupState] = useState("idle");
   const [error, setError] = useState("");
+  const [debate, setDebate] = useState(null);
+  const [debateState, setDebateState] = useState("idle");
+  const [debateError, setDebateError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -121,11 +124,44 @@ function App() {
       }
 
       setSnapshot(data);
+      setDebate(null);
+      setDebateError("");
+      setDebateState("idle");
       setLookupState("ready");
     } catch (lookupError) {
       setSnapshot(null);
+      setDebate(null);
       setError(lookupError.message);
       setLookupState("error");
+    }
+  }
+
+  async function handleStartDebate() {
+    if (!snapshot) {
+      return;
+    }
+
+    setDebateState("loading");
+    setDebateError("");
+
+    try {
+      const response = await fetch("/api/debates/round-one", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticker: snapshot.ticker, language: "zh-Hant" }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail?.message || "辯論生成失敗，請稍後再試。");
+      }
+
+      setDebate(data);
+      setDebateState("ready");
+    } catch (debateLookupError) {
+      setDebate(null);
+      setDebateError(debateLookupError.message);
+      setDebateState("error");
     }
   }
 
@@ -205,6 +241,14 @@ function App() {
               <div className="mt-8">
                 <PriceLine history={snapshot.history} />
               </div>
+              <button
+                type="button"
+                onClick={handleStartDebate}
+                disabled={debateState === "loading"}
+                className="mt-7 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+              >
+                {debateState === "loading" ? "多空研究中" : "開始辯論"}
+              </button>
             </>
           ) : (
             <div className="flex h-full min-h-80 items-center justify-center rounded border border-dashed border-zinc-700 text-zinc-400">
@@ -213,7 +257,60 @@ function App() {
           )}
         </div>
       </section>
+
+      {debateState === "loading" ? (
+        <section className="mx-auto max-w-6xl px-8 pb-12">
+          <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
+            多頭研究中… 空頭研究中…
+          </div>
+        </section>
+      ) : null}
+
+      {debateError ? (
+        <section className="mx-auto max-w-6xl px-8 pb-12">
+          <div className="rounded-lg border border-red-400/40 bg-red-950/40 p-5 text-red-100">
+            {debateError}
+          </div>
+        </section>
+      ) : null}
+
+      {debate ? (
+        <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
+          <OpeningColumn title="多頭開場" tone="bull" claims={debate.bull.claims} />
+          <OpeningColumn title="空頭開場" tone="bear" claims={debate.bear.claims} />
+        </section>
+      ) : null}
     </main>
+  );
+}
+
+function OpeningColumn({ title, tone, claims }) {
+  const toneClass =
+    tone === "bull"
+      ? "border-emerald-400/40 bg-emerald-950/20 text-emerald-100"
+      : "border-red-400/40 bg-red-950/20 text-red-100";
+
+  return (
+    <div className={`rounded-lg border p-6 ${toneClass}`}>
+      <h2 className="text-2xl font-semibold">{title}</h2>
+      <div className="mt-5 space-y-4">
+        {claims.map((claim) => (
+          <article key={claim.claim_id} className="rounded border border-zinc-700/70 bg-zinc-950/80 p-4">
+            <p className="text-sm font-semibold text-zinc-400">#{claim.claim_id}</p>
+            <h3 className="mt-2 text-lg font-semibold text-zinc-100">{claim.claim}</h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-300">{claim.evidence}</p>
+            <a
+              className="mt-4 inline-block text-sm text-amber-200 underline-offset-4 hover:underline"
+              href={claim.source_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {claim.source_name}
+            </a>
+          </article>
+        ))}
+      </div>
+    </div>
   );
 }
 
