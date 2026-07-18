@@ -291,3 +291,15 @@
 
 ### 下一步
 - §6 開發任務已全部完成。待使用者提供 GitHub remote URL 後，設定 remote 並推送既有本地 commits。
+
+## 2026-07-18 GitHub remote 設定
+
+### 做了什麼
+- 使用使用者提供的 remote URL 設定 `origin`：`https://github.com/houyehh/FinDebate.git`。
+- 將本地 `master` 分支推送到 GitHub，並設定 upstream tracking。
+
+### 驗收結果
+- `git push -u origin master`：通過，已建立遠端分支 `master -> master`。
+
+### 下一步
+- 若後續要改用 `main` 作為預設分支，可再由使用者決定是否重新命名分支。
