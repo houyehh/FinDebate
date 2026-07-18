@@ -143,7 +143,8 @@
 
 ### 遇到的問題
 - 目前環境仍沒有 `OPENAI_API_KEY`，因此無法執行真實 Judge agent + web search 驗收；已用 mock 測試覆蓋 schema、retry、完整覆蓋檢查、`unverifiable` flag 與 UI 流程。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `6bb7b4f feat: add judge scoring`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 6：實作 F4 盲判站邊，站邊送出前隱藏裁判分數，送出後揭曉並寫入 SQLite。
