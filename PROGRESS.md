@@ -264,3 +264,30 @@
 
 ### 下一步
 - 任務 10：撰寫 README，包含安裝步驟、架構圖、demo seed 腳本與 Codex 使用說明段落留空。
+
+## 2026-07-18 任務 10：README
+
+### 做了什麼
+- 新增 `README.md`，說明產品用途、技術棧、專案結構與本機執行方式。
+- 補上 Mermaid 架構圖，描述 React UI、FastAPI、yfinance、OpenAI Responses API 與 SQLite 的資料流。
+- 補上安裝步驟、後端/前端啟動命令、健康檢查、測試命令與主要 API 清單。
+- 補上 `scripts/demo_seed.py --demo-seed` 使用說明。
+- 新增 `Codex 使用說明` 段落標題並保持留空，等待使用者自行補充。
+
+### 關鍵決定
+- README 使用繁體中文撰寫，命令維持 PowerShell 格式，符合目前 Windows workspace。
+- 不加入部署、Docker 或 CI/CD 說明，避免超出不做清單。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，11 passed。
+- `npm.cmd test`：通過，5 passed。
+- `npm.cmd run build`：通過。
+- `Select-String -Path README.md -Pattern '架構圖','Demo Seed','Codex 使用說明','uvicorn','npm.cmd run dev'`：通過，必要段落與命令皆存在。
+
+### 遇到的問題
+- 前端測試與 build 仍需在 sandbox 外執行，原因同任務 9：Vite/esbuild 在 sandbox 內讀取目錄權限失敗。
+- 已建立本地 commit `05962fd docs: add project README`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
+
+### 下一步
+- §6 開發任務已全部完成。待使用者提供 GitHub remote URL 後，設定 remote 並推送既有本地 commits。
