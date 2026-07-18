@@ -235,3 +235,32 @@
 
 ### 下一步
 - 任務 9：UI 打磨，調整配色、間距、圖表美化，並將三頁截圖存入 `screenshots/`。
+
+## 2026-07-18 任務 9：UI 打磨與截圖
+
+### 做了什麼
+- 調整首頁左右欄位為等寬配置，並在兩個主要卡片加上 `min-w-0`，避免圖表與輸入區在桌面寬度下擠壓或溢出。
+- 以目前深色金融風格、Bull 綠色、Bear 紅色、裁判金色/灰色為基礎，確認三個主要頁面的間距、卡片層級與文字可讀性。
+- 產出三張桌面截圖：
+  - `screenshots/01_home.png`
+  - `screenshots/02_debate.png`
+  - `screenshots/03_records.png`
+
+### 關鍵決定
+- 不新增動畫或額外功能，只做桌面優先的版面穩定與截圖驗收，遵守不做清單。
+- 截圖使用 mock API 與 headless Chrome 走完整 UI 流程產生；mock helper 僅作為本次驗收工具，截圖完成後已移除，避免留下非產品程式。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，11 passed。
+- `npm.cmd test`：通過，5 passed。
+- `npm.cmd run build`：通過。
+- 已人工檢視三張截圖：首頁、辯論頁、戰績頁皆非空白、桌面寬度正常，未發現主要 UI 重疊或裁切。
+
+### 遇到的問題
+- Vite/Vitest 在 sandbox 內啟動時會因 esbuild 讀取目錄權限失敗，已依規則使用 escalated command 完成前端測試與 build。
+- in-app browser 的 screenshot surface 曾產生窄版/裁切畫面，因此改用 headless Chrome CDP 產生最終截圖。
+- 已建立本地 commit `7ee0c6b style: polish UI and capture screenshots`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
+
+### 下一步
+- 任務 10：撰寫 README，包含安裝步驟、架構圖、demo seed 腳本與 Codex 使用說明段落留空。
