@@ -178,3 +178,33 @@
 
 ### 下一步
 - 任務 7：實作 F5 戰績與回測 + demo seed，每次打開戰績頁自動刷新未結算項目。
+
+## 2026-07-18 任務 7：F5 戰績與回測 + demo seed
+
+### 做了什麼
+- verdict 寫入時自動建立 `1d`、`7d`、`30d` 三個 pending settlement。
+- 新增 pending settlement refresh：到期後用 yfinance 抓目標日期附近真實收盤價，計算漲跌幅與 win/loss/draw。
+- 新增 `GET /api/records`，每次讀取戰績前會先刷新未結算項目。
+- 新增統計儀表板資料：總判斷數、7 日勝率、多空中立分佈、校準度、與裁判一致率、同邊/不同邊勝率。
+- 前端新增「戰績」頁，顯示統計卡片與歷史判斷表，未到期欄位顯示「待結算」。
+- 新增 `scripts/demo_seed.py --demo-seed`，寫入 5 筆 demo verdict 並用真實歷史價格刷新結算。
+
+### 關鍵決定
+- 主要勝負週期使用 7 日；1 日與 30 日仍顯示在列表中。
+- ±1% 內視為 draw；看多遇上漲超過 1% 為 win，看空遇下跌超過 1% 為 win，中立若超過 ±1% 視為 loss。
+- 非交易日以目標日期附近可取得的收盤價計算，優先使用目標日之前最近收盤價，避免週末 demo 無法結算。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，11 passed。
+- `npm.cmd test`：通過，4 passed。
+- `npm.cmd run build`：通過。
+- `.\.venv\Scripts\python.exe scripts\demo_seed.py --demo-seed`：通過，寫入 5 筆 demo verdict。
+- demo seed 後 scoreboard 統計：總判斷數 5，7 日勝率 20.0%，高信心勝率 33.3%，低信心勝率 0.0%，與裁判一致率 80.0%。
+- 手算核對一筆：`NVDA` 看多，判斷價 `210.96`，7 日價 `202.81`，漲跌幅 `(202.81 - 210.96) / 210.96 = -3.8633%`，看多判定為 `loss`，與系統一致。
+
+### 遇到的問題
+- demo seed 會建立本機 `data/app.db`，此檔案已被 `.gitignore` 排除，不會提交。
+- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+
+### 下一步
+- 任務 8：實作 F6 中英切換，UI 文案切換並將語言偏好存入 localStorage。

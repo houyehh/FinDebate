@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from datetime import date, timedelta
 from typing import Any
 
 import yfinance as yf
@@ -170,3 +171,35 @@ def _currency_from_ticker(ticker: str) -> str | None:
     if ticker.endswith("-USD"):
         return "USD"
     return None
+
+
+def get_close_near_date(raw_ticker: str, target_date: date) -> float | None:
+    ticker = normalize_ticker(raw_ticker)
+    start = target_date - timedelta(days=5)
+    end = target_date + timedelta(days=6)
+    history = yf.Ticker(ticker).history(
+        start=start.isoformat(),
+        end=end.isoformat(),
+        interval="1d",
+        auto_adjust=False,
+    )
+
+    if history.empty or "Close" not in history:
+        return None
+
+    dated_prices: list[tuple[date, float]] = []
+    for index, row in history.iterrows():
+        close = _to_number(row.get("Close"))
+        if close is None or close <= 0:
+            continue
+        price_date = index.date() if hasattr(index, "date") else date.fromisoformat(str(index)[:10])
+        dated_prices.append((price_date, close))
+
+    if not dated_prices:
+        return None
+
+    on_or_before = [item for item in dated_prices if item[0] <= target_date]
+    if on_or_before:
+        return round(on_or_before[-1][1], 4)
+
+    return round(dated_prices[0][1], 4)

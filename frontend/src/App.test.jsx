@@ -256,6 +256,64 @@ describe("App", () => {
         });
       }
 
+      if (url === "/api/records") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              stats: {
+                total_verdicts: 2,
+                win_rate_7d: 50,
+                bull_count: 1,
+                bear_count: 1,
+                neutral_count: 0,
+                high_confidence_win_rate_7d: 100,
+                low_confidence_win_rate_7d: 0,
+                judge_agreement_rate: 50,
+                aligned_win_rate_7d: 100,
+                unaligned_win_rate_7d: 0,
+              },
+              records: [
+                {
+                  id: 1,
+                  debate_id: 1,
+                  ticker: "NVDA",
+                  side: "bull",
+                  confidence: 5,
+                  note: "High confidence winner.",
+                  price_at_verdict: 100,
+                  created_at: "2026-07-10T00:00:00+00:00",
+                  judge_side: "bull",
+                  judge_agreement: true,
+                  settlements: [
+                    {
+                      horizon: "1d",
+                      settle_price: 105,
+                      pct_change: 5,
+                      result: "win",
+                      settled_at: "2026-07-11T00:00:00+00:00",
+                    },
+                    {
+                      horizon: "7d",
+                      settle_price: 110,
+                      pct_change: 10,
+                      result: "win",
+                      settled_at: "2026-07-17T00:00:00+00:00",
+                    },
+                    {
+                      horizon: "30d",
+                      settle_price: null,
+                      pct_change: null,
+                      result: "pending",
+                      settled_at: null,
+                    },
+                  ],
+                },
+              ],
+            }),
+        });
+      }
+
       return Promise.resolve({
         ok: false,
         json: () =>
@@ -309,5 +367,18 @@ describe("App", () => {
     expect(screen.getAllByText("證據 4").length).toBeGreaterThan(0);
     expect(screen.getByText("unverifiable：Cannot verify the source.")).toBeInTheDocument();
     expect(screen.getByText(/你與裁判同邊/)).toBeInTheDocument();
+  });
+
+  it("loads the records page with settled scoreboard data", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "戰績" }));
+
+    expect(await screen.findByText("判斷力戰績")).toBeInTheDocument();
+    expect(screen.getByText("7日勝率")).toBeInTheDocument();
+    expect(screen.getAllByText("50%").length).toBeGreaterThan(1);
+    expect(screen.getByText("NVDA")).toBeInTheDocument();
+    expect(screen.getByText("110.00 (+10.00%) 勝")).toBeInTheDocument();
+    expect(screen.getByText("待結算")).toBeInTheDocument();
   });
 });

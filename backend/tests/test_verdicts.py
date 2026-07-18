@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -157,3 +158,47 @@ def test_submit_verdict_persists_debate_and_verdict(monkeypatch) -> None:
     assert "Bull claim 1" in debate_row[1]
     assert "Bull has stronger evidence quality" in debate_row[2]
     assert verdict_row == ("bull", 4, "Evidence quality looked stronger.", 1)
+
+
+def test_scoreboard_refreshes_settlements_and_stats(monkeypatch) -> None:
+    database_file = Path("data") / f"test_{uuid4().hex}.db"
+    monkeypatch.setenv("DATABASE_PATH", str(database_file))
+    monkeypatch.setattr(database, "get_close_near_date", lambda _ticker, _target_date: 110.0)
+    created_at = (datetime.now(timezone.utc) - timedelta(days=8)).isoformat()
+
+    database.insert_demo_verdict(
+        ticker="NVDA",
+        side="bull",
+        confidence=5,
+        note="High confidence winner.",
+        created_at=created_at,
+        price_at_verdict=100.0,
+        judge_side="bull",
+    )
+    database.insert_demo_verdict(
+        ticker="AAPL",
+        side="bear",
+        confidence=2,
+        note="Low confidence loser.",
+        created_at=created_at,
+        price_at_verdict=100.0,
+        judge_side="bull",
+    )
+
+    scoreboard = database.get_scoreboard()
+
+    assert scoreboard.stats.total_verdicts == 2
+    assert scoreboard.stats.win_rate_7d == 50.0
+    assert scoreboard.stats.bull_count == 1
+    assert scoreboard.stats.bear_count == 1
+    assert scoreboard.stats.high_confidence_win_rate_7d == 100.0
+    assert scoreboard.stats.low_confidence_win_rate_7d == 0.0
+    assert scoreboard.stats.judge_agreement_rate == 50.0
+    assert scoreboard.stats.aligned_win_rate_7d == 100.0
+    assert scoreboard.stats.unaligned_win_rate_7d == 0.0
+
+    first_record = next(record for record in scoreboard.records if record.ticker == "NVDA")
+    seven_day = next(settlement for settlement in first_record.settlements if settlement.horizon == "7d")
+    assert seven_day.settle_price == 110.0
+    assert seven_day.pct_change == 10.0
+    assert seven_day.result == "win"

@@ -82,6 +82,10 @@ function App() {
   const [note, setNote] = useState("");
   const [verdictState, setVerdictState] = useState("idle");
   const [verdictResult, setVerdictResult] = useState(null);
+  const [activePage, setActivePage] = useState("home");
+  const [recordsState, setRecordsState] = useState("idle");
+  const [recordsData, setRecordsData] = useState(null);
+  const [recordsError, setRecordsError] = useState("");
 
   useEffect(() => {
     let active = true;
@@ -108,6 +112,12 @@ function App() {
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (activePage === "records") {
+      fetchRecords();
+    }
+  }, [activePage]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -141,6 +151,26 @@ function App() {
       resetVerdictState();
       setError(lookupError.message);
       setLookupState("error");
+    }
+  }
+
+  async function fetchRecords() {
+    setRecordsState("loading");
+    setRecordsError("");
+
+    try {
+      const response = await fetch("/api/records");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail?.message || "戰績讀取失敗，請稍後再試。");
+      }
+
+      setRecordsData(data);
+      setRecordsState("ready");
+    } catch (recordsLookupError) {
+      setRecordsError(recordsLookupError.message);
+      setRecordsState("error");
     }
   }
 
@@ -222,13 +252,41 @@ function App() {
     <main className="min-h-screen bg-zinc-950 text-zinc-100">
       <nav className="border-b border-zinc-800 bg-zinc-950/90">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-5">
-          <span className="text-lg font-semibold tracking-wide">Bull vs Bear Arena</span>
+          <div className="flex items-center gap-6">
+            <span className="text-lg font-semibold tracking-wide">Bull vs Bear Arena</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setActivePage("home")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "home"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                首頁
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("records")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "records"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                戰績
+              </button>
+            </div>
+          </div>
           <span className="rounded border border-amber-400/40 px-3 py-1 text-sm text-amber-200">
             API: {healthLabels[health]}
           </span>
         </div>
       </nav>
 
+      {activePage === "home" ? (
+        <>
       <section className="mx-auto grid max-w-6xl grid-cols-[0.95fr_1.05fr] gap-8 px-8 py-12">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-7">
           <p className="text-sm uppercase text-amber-200">Ticker lookup</p>
@@ -378,6 +436,15 @@ function App() {
           </section>
         </>
       ) : null}
+        </>
+      ) : (
+        <RecordsPage
+          state={recordsState}
+          data={recordsData}
+          error={recordsError}
+          onRefresh={fetchRecords}
+        />
+      )}
     </main>
   );
 }
@@ -609,6 +676,143 @@ function ScoreStrip({ score }) {
       ) : null}
     </div>
   );
+}
+
+function RecordsPage({ state, data, error, onRefresh }) {
+  if (state === "loading" && !data) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
+          戰績刷新中
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-red-400/40 bg-red-950/40 p-5 text-red-100">
+          {error}
+        </div>
+      </section>
+    );
+  }
+
+  const stats = data?.stats;
+  const records = data?.records || [];
+
+  return (
+    <section className="mx-auto max-w-6xl px-8 py-12">
+      <div className="flex items-start justify-between gap-8">
+        <div>
+          <p className="text-sm uppercase text-amber-200">Scoreboard</p>
+          <h1 className="mt-2 text-4xl font-semibold">判斷力戰績</h1>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+        >
+          刷新
+        </button>
+      </div>
+
+      {stats ? (
+        <div className="mt-8 grid grid-cols-4 gap-4">
+          <StatBox label="總判斷數" value={stats.total_verdicts} />
+          <StatBox label="7日勝率" value={formatPercent(stats.win_rate_7d)} />
+          <StatBox label="與裁判一致率" value={formatPercent(stats.judge_agreement_rate)} />
+          <StatBox
+            label="多/空/中立"
+            value={`${stats.bull_count}/${stats.bear_count}/${stats.neutral_count}`}
+          />
+          <StatBox label="高信心勝率" value={formatPercent(stats.high_confidence_win_rate_7d)} />
+          <StatBox label="低信心勝率" value={formatPercent(stats.low_confidence_win_rate_7d)} />
+          <StatBox label="同邊勝率" value={formatPercent(stats.aligned_win_rate_7d)} />
+          <StatBox label="不同邊勝率" value={formatPercent(stats.unaligned_win_rate_7d)} />
+        </div>
+      ) : null}
+
+      <div className="mt-8 overflow-hidden rounded-lg border border-zinc-800">
+        <table className="w-full border-collapse bg-zinc-900 text-left text-sm">
+          <thead className="bg-zinc-950 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3">標的</th>
+              <th className="px-4 py-3">方向</th>
+              <th className="px-4 py-3">信心</th>
+              <th className="px-4 py-3">判斷價</th>
+              <th className="px-4 py-3">1日</th>
+              <th className="px-4 py-3">7日</th>
+              <th className="px-4 py-3">30日</th>
+              <th className="px-4 py-3">裁判</th>
+            </tr>
+          </thead>
+          <tbody>
+            {records.map((record) => (
+              <tr key={record.id} className="border-t border-zinc-800 text-zinc-200">
+                <td className="px-4 py-4 font-semibold">{record.ticker}</td>
+                <td className="px-4 py-4">{sideLabel(record.side)}</td>
+                <td className="px-4 py-4">{record.confidence}</td>
+                <td className="px-4 py-4">{record.price_at_verdict.toFixed(2)}</td>
+                <td className="px-4 py-4">{settlementLabel(record, "1d")}</td>
+                <td className="px-4 py-4">{settlementLabel(record, "7d")}</td>
+                <td className="px-4 py-4">{settlementLabel(record, "30d")}</td>
+                <td className="px-4 py-4">
+                  {record.judge_agreement ? "同邊" : "不同邊"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {records.length === 0 ? (
+          <div className="bg-zinc-900 p-8 text-center text-zinc-400">尚無戰績</div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function StatBox({ label, value }) {
+  return (
+    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+      <p className="text-sm text-zinc-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-zinc-100">{value}</p>
+    </div>
+  );
+}
+
+function settlementLabel(record, horizon) {
+  const settlement = record.settlements.find((item) => item.horizon === horizon);
+  if (!settlement || settlement.result === "pending") {
+    return "待結算";
+  }
+  const pct = `${settlement.pct_change > 0 ? "+" : ""}${settlement.pct_change.toFixed(2)}%`;
+  return `${settlement.settle_price.toFixed(2)} (${pct}) ${resultLabel(settlement.result)}`;
+}
+
+function resultLabel(result) {
+  if (result === "win") {
+    return "勝";
+  }
+  if (result === "loss") {
+    return "負";
+  }
+  return "平";
+}
+
+function sideLabel(side) {
+  if (side === "bull") {
+    return "看多";
+  }
+  if (side === "bear") {
+    return "看空";
+  }
+  return "中立";
+}
+
+function formatPercent(value) {
+  return value == null ? "待累積" : `${value}%`;
 }
 
 export default App;

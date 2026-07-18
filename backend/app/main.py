@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from app.database import VerdictRecord, VerdictSide, save_verdict
+from app.database import ScoreboardResponse, VerdictRecord, VerdictSide, get_scoreboard, save_verdict
 from app.debate import (
     DebateConfigurationError,
     DebateGenerationError,
@@ -131,3 +131,8 @@ def submit_verdict(request: VerdictSubmitRequest) -> VerdictRecord:
         confidence=request.confidence,
         note=request.note,
     )
+
+
+@app.get("/api/records", response_model=ScoreboardResponse)
+def read_records() -> ScoreboardResponse:
+    return get_scoreboard()
