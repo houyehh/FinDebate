@@ -318,8 +318,8 @@ function App() {
 
       {activePage === "home" ? (
         <>
-      <section className="mx-auto grid max-w-6xl grid-cols-[0.95fr_1.05fr] gap-8 px-8 py-12">
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-7">
+      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 py-12">
+        <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 p-7">
           <p className="text-sm uppercase text-amber-200">{t.tickerLookup}</p>
           <h1 className="mt-3 text-4xl font-semibold">{t.appTitle}</h1>
 
@@ -365,7 +365,7 @@ function App() {
           ) : null}
         </div>
 
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-7">
+        <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 p-7">
           {snapshot ? (
             <>
               <div className="flex items-start justify-between gap-6">
