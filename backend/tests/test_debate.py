@@ -16,6 +16,16 @@ def _claim(side: str, index: int) -> dict[str, str]:
     }
 
 
+def _rebuttal(side: str, target: str, index: int) -> dict[str, str]:
+    prefix = side.upper()
+    return {
+        "target_claim_id": target,
+        "rebuttal": f"{prefix} rebuttal {index}",
+        "evidence": f"{prefix} rebuttal evidence {index}",
+        "source_url": f"https://example.com/{side}/rebuttal-{index}",
+    }
+
+
 def _snapshot() -> TickerSnapshot:
     return TickerSnapshot(
         ticker="NVDA",
@@ -69,4 +79,82 @@ def test_opening_generation_retries_once_after_invalid_schema(monkeypatch) -> No
 
     assert opening.side == "bull"
     assert len(opening.claims) == 3
+    assert calls == []
+
+
+def test_two_round_debate_endpoint_returns_rebuttals(monkeypatch) -> None:
+    monkeypatch.setattr(debate, "get_ticker_snapshot", lambda _ticker: _snapshot())
+    monkeypatch.setattr(
+        debate,
+        "generate_opening_for_side",
+        lambda side, _snapshot, _language: debate.OpeningRound(
+            side=side,
+            claims=[_claim(side, index) for index in range(1, 4)],
+        ),
+    )
+    monkeypatch.setattr(
+        debate,
+        "generate_rebuttals_for_side",
+        lambda side, _snapshot, own_round, opponent_round, language: debate.RebuttalRound(
+            side=side,
+            rebuttals=[
+                _rebuttal(side, opponent_round.claims[0].claim_id, 1),
+                _rebuttal(side, opponent_round.claims[1].claim_id, 2),
+            ],
+        ),
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/debates/two-round", json={"ticker": "NVDA"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["bull_rebuttals"]["rebuttals"]) == 2
+    assert len(body["bear_rebuttals"]["rebuttals"]) == 2
+    assert body["bull_rebuttals"]["rebuttals"][0]["target_claim_id"] == "BEAR-1"
+    assert body["bear_rebuttals"]["rebuttals"][0]["target_claim_id"] == "BULL-1"
+    assert body["bull_rebuttals"]["rebuttals"][0]["source_url"].startswith("https://")
+
+
+def test_rebuttal_generation_retries_once_after_invalid_target(monkeypatch) -> None:
+    own_round = debate.OpeningRound(
+        side="bull",
+        claims=[_claim("bull", index) for index in range(1, 4)],
+    )
+    opponent_round = debate.OpeningRound(
+        side="bear",
+        claims=[_claim("bear", index) for index in range(1, 4)],
+    )
+    calls = [
+        {
+            "side": "bull",
+            "rebuttals": [
+                _rebuttal("bull", "NOT-A-CLAIM", 1),
+                _rebuttal("bull", "BEAR-2", 2),
+            ],
+        },
+        {
+            "side": "bull",
+            "rebuttals": [
+                _rebuttal("bull", "BEAR-1", 1),
+                _rebuttal("bull", "BEAR-2", 2),
+            ],
+        },
+    ]
+
+    def fake_call(_side, _snapshot, _own_round, _opponent_round, _language):
+        return calls.pop(0)
+
+    monkeypatch.setattr(debate, "_call_openai_rebuttals", fake_call)
+
+    rebuttal_round = debate.generate_rebuttals_for_side(
+        "bull",
+        _snapshot(),
+        own_round=own_round,
+        opponent_round=opponent_round,
+        language="zh-Hant",
+    )
+
+    assert rebuttal_round.side == "bull"
+    assert len(rebuttal_round.rebuttals) == 2
     assert calls == []

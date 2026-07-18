@@ -2,7 +2,14 @@ from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.debate import DebateConfigurationError, DebateGenerationError, RoundOneDebate, generate_round_one_debate
+from app.debate import (
+    DebateConfigurationError,
+    DebateGenerationError,
+    RoundOneDebate,
+    TwoRoundDebate,
+    generate_round_one_debate,
+    generate_two_round_debate,
+)
 from app.market_data import TickerLookupError, TickerSnapshot, get_ticker_snapshot
 
 app = FastAPI(title="Bull vs Bear Arena API")
@@ -47,6 +54,27 @@ class RoundOneDebateRequest(BaseModel):
 def create_round_one_debate(request: RoundOneDebateRequest) -> RoundOneDebate:
     try:
         return generate_round_one_debate(request.ticker, request.language)
+    except TickerLookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": exc.message,
+                "examples": ["NVDA", "2330.TW", "BTC-USD"],
+            },
+        ) from exc
+    except DebateConfigurationError as exc:
+        raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
+    except DebateGenerationError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"message": "Debate generation failed. Please try again."},
+        ) from exc
+
+
+@app.post("/api/debates/two-round", response_model=TwoRoundDebate)
+def create_two_round_debate(request: RoundOneDebateRequest) -> TwoRoundDebate:
+    try:
+        return generate_two_round_debate(request.ticker, request.language)
     except TickerLookupError as exc:
         raise HTTPException(
             status_code=404,

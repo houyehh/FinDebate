@@ -89,3 +89,31 @@
 
 ### 下一步
 - 任務 4：實作第二輪反駁並接上 web search，要求雙方各 2 個 rebuttals，且所有論點與反駁都附真實可點擊來源。
+
+## 2026-07-18 任務 4：F2 第二輪反駁 + web search
+
+### 做了什麼
+- 依 OpenAI 官方 quickstart 確認 Responses API 可用內建 `web_search` tool。
+- 新增第二輪反駁 schema：每方固定 2 個 rebuttals，包含 `target_claim_id`、`rebuttal`、`evidence`、`source_url`。
+- 第二輪 OpenAI 呼叫啟用 web search；第一輪仍維持不啟用工具。
+- 後端動態限制 `target_claim_id` 必須是對方第一輪論點 ID，驗證失敗時自動重試 1 次。
+- 新增 `POST /api/debates/two-round`，產生第一輪開場與第二輪反駁。
+- 前端「開始辯論」改呼叫兩輪 endpoint，並新增第二輪反駁區；每張反駁卡片顯示「反駁 → 對方論點 #ID」且可跳到原論點。
+
+### 關鍵決定
+- 第二輪才接 web search，符合任務 3/4 的分段要求。
+- `source_url` 在第二輪 schema 中為必填，前端直接以可點擊連結呈現。
+- Mock 測試檢查雙方各 2 個 rebuttals、target ID 正確、source URL 為可點擊 URL 格式。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，7 passed。
+- `npm.cmd test`：通過，3 passed。
+- `npm.cmd run build`：通過。
+- Mock 驗收已確認 Bull/Bear 各有 2 個 rebuttals，且 `target_claim_id` 指向對方第一輪論點。
+
+### 遇到的問題
+- 目前環境仍沒有 `OPENAI_API_KEY`，因此無法執行真實 OpenAI web search 驗收；已用 mock 測試覆蓋 schema、retry、target validation 與 UI 流程。
+- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+
+### 下一步
+- 任務 5：實作裁判查核與評分，每個論點與反駁都有證據、來源、邏輯三項分數，並能標記 `unverifiable`。

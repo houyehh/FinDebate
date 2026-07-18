@@ -32,7 +32,7 @@ describe("App", () => {
         });
       }
 
-      if (url === "/api/debates/round-one") {
+      if (url === "/api/debates/two-round") {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -94,6 +94,40 @@ describe("App", () => {
                   },
                 ],
               },
+              bull_rebuttals: {
+                side: "bull",
+                rebuttals: [
+                  {
+                    target_claim_id: "BEAR-1",
+                    rebuttal: "Bull rebuttal 1",
+                    evidence: "Bull rebuttal evidence 1",
+                    source_url: "https://example.com/bull/rebuttal-1",
+                  },
+                  {
+                    target_claim_id: "BEAR-2",
+                    rebuttal: "Bull rebuttal 2",
+                    evidence: "Bull rebuttal evidence 2",
+                    source_url: "https://example.com/bull/rebuttal-2",
+                  },
+                ],
+              },
+              bear_rebuttals: {
+                side: "bear",
+                rebuttals: [
+                  {
+                    target_claim_id: "BULL-1",
+                    rebuttal: "Bear rebuttal 1",
+                    evidence: "Bear rebuttal evidence 1",
+                    source_url: "https://example.com/bear/rebuttal-1",
+                  },
+                  {
+                    target_claim_id: "BULL-2",
+                    rebuttal: "Bear rebuttal 2",
+                    evidence: "Bear rebuttal evidence 2",
+                    source_url: "https://example.com/bear/rebuttal-2",
+                  },
+                ],
+              },
             }),
         });
       }
@@ -140,5 +174,9 @@ describe("App", () => {
     expect(screen.getByText("空頭開場")).toBeInTheDocument();
     expect(screen.getByText("Bull claim 1")).toBeInTheDocument();
     expect(screen.getByText("Bear claim 1")).toBeInTheDocument();
+    expect(screen.getByText("多頭反駁")).toBeInTheDocument();
+    expect(screen.getByText("空頭反駁")).toBeInTheDocument();
+    expect(screen.getByText("Bull rebuttal 1")).toBeInTheDocument();
+    expect(screen.getByText("反駁 → 對方論點 #BEAR-1")).toBeInTheDocument();
   });
 });

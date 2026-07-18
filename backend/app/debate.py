@@ -33,6 +33,18 @@ class OpeningRound(BaseModel):
         return self
 
 
+class Rebuttal(BaseModel):
+    target_claim_id: str = Field(min_length=1)
+    rebuttal: str = Field(min_length=1)
+    evidence: str = Field(min_length=1)
+    source_url: str = Field(min_length=1)
+
+
+class RebuttalRound(BaseModel):
+    side: Side
+    rebuttals: list[Rebuttal] = Field(min_length=2, max_length=2)
+
+
 class RoundOneDebate(BaseModel):
     ticker: str
     language: str
@@ -41,6 +53,11 @@ class RoundOneDebate(BaseModel):
     bear: OpeningRound
     price_at_debate: float
     currency: str
+
+
+class TwoRoundDebate(RoundOneDebate):
+    bull_rebuttals: RebuttalRound
+    bear_rebuttals: RebuttalRound
 
 
 class DebateGenerationError(Exception):
@@ -83,6 +100,30 @@ def generate_round_one_debate(ticker: str, language: str = "zh-Hant") -> RoundOn
     bull = generate_opening_for_side("bull", snapshot, language)
     bear = generate_opening_for_side("bear", snapshot, language)
 
+    return _build_round_one_response(snapshot, language, bull, bear)
+
+
+def generate_two_round_debate(ticker: str, language: str = "zh-Hant") -> TwoRoundDebate:
+    snapshot = get_ticker_snapshot(ticker)
+    bull = generate_opening_for_side("bull", snapshot, language)
+    bear = generate_opening_for_side("bear", snapshot, language)
+    bull_rebuttals = generate_rebuttals_for_side("bull", snapshot, own_round=bull, opponent_round=bear, language=language)
+    bear_rebuttals = generate_rebuttals_for_side("bear", snapshot, own_round=bear, opponent_round=bull, language=language)
+    first_round = _build_round_one_response(snapshot, language, bull, bear)
+
+    return TwoRoundDebate(
+        **first_round.model_dump(),
+        bull_rebuttals=bull_rebuttals,
+        bear_rebuttals=bear_rebuttals,
+    )
+
+
+def _build_round_one_response(
+    snapshot: TickerSnapshot,
+    language: str,
+    bull: OpeningRound,
+    bear: OpeningRound,
+) -> RoundOneDebate:
     return RoundOneDebate(
         ticker=snapshot.ticker,
         language=language,
@@ -110,6 +151,36 @@ def generate_opening_for_side(side: Side, snapshot: TickerSnapshot, language: st
     raise DebateGenerationError(f"Model output did not match opening schema: {last_error}")
 
 
+def generate_rebuttals_for_side(
+    side: Side,
+    snapshot: TickerSnapshot,
+    own_round: OpeningRound,
+    opponent_round: OpeningRound,
+    language: str,
+) -> RebuttalRound:
+    target_claim_ids = [claim.claim_id for claim in opponent_round.claims]
+    last_error: Exception | None = None
+
+    for _attempt in range(2):
+        try:
+            raw_payload = _call_openai_rebuttals(side, snapshot, own_round, opponent_round, language)
+            rebuttal_round = RebuttalRound.model_validate(raw_payload)
+            if rebuttal_round.side != side:
+                raise ValueError(f"Expected side {side}, got {rebuttal_round.side}")
+            invalid_targets = [
+                rebuttal.target_claim_id
+                for rebuttal in rebuttal_round.rebuttals
+                if rebuttal.target_claim_id not in target_claim_ids
+            ]
+            if invalid_targets:
+                raise ValueError(f"Invalid target claim ids: {invalid_targets}")
+            return rebuttal_round
+        except (json.JSONDecodeError, ValidationError, ValueError) as exc:
+            last_error = exc
+
+    raise DebateGenerationError(f"Model output did not match rebuttal schema: {last_error}")
+
+
 def _call_openai_opening(side: Side, snapshot: TickerSnapshot, language: str) -> dict[str, Any]:
     api_key = get_openai_api_key()
     if not api_key:
@@ -135,6 +206,41 @@ def _call_openai_opening(side: Side, snapshot: TickerSnapshot, language: str) ->
     return json.loads(response.output_text)
 
 
+def _call_openai_rebuttals(
+    side: Side,
+    snapshot: TickerSnapshot,
+    own_round: OpeningRound,
+    opponent_round: OpeningRound,
+    language: str,
+) -> dict[str, Any]:
+    api_key = get_openai_api_key()
+    if not api_key:
+        raise DebateConfigurationError("OPENAI_API_KEY is not configured.")
+
+    client = OpenAI(api_key=api_key)
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=[
+            {"role": "system", "content": _rebuttal_system_prompt(side, language)},
+            {
+                "role": "user",
+                "content": _rebuttal_user_prompt(snapshot, own_round, opponent_round),
+            },
+        ],
+        tools=[{"type": "web_search"}],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": f"{side}_rebuttal_round",
+                "schema": _rebuttal_round_schema([claim.claim_id for claim in opponent_round.claims]),
+                "strict": True,
+            }
+        },
+    )
+
+    return json.loads(response.output_text)
+
+
 def _system_prompt(side: Side, language: str) -> str:
     stance = "bullish" if side == "bull" else "bearish"
     output_language = "Traditional Chinese" if language.startswith("zh") else "English"
@@ -150,6 +256,21 @@ def _system_prompt(side: Side, language: str) -> str:
     )
 
 
+def _rebuttal_system_prompt(side: Side, language: str) -> str:
+    stance = "bullish" if side == "bull" else "bearish"
+    output_language = "Traditional Chinese" if language.startswith("zh") else "English"
+
+    return (
+        f"You are the {stance} analyst in round two of a fixed investment debate. "
+        "Use the web search tool to verify current facts and find evidence. "
+        "Generate exactly two rebuttals to the opponent's round-one claims. "
+        "Each rebuttal must target one opponent claim_id, include concrete evidence, "
+        "and include a real source_url used for the rebuttal. "
+        f"Write rebuttal and evidence text in {output_language}. "
+        "Return only JSON matching the provided schema."
+    )
+
+
 def _user_prompt(snapshot: TickerSnapshot) -> str:
     history_text = ", ".join(
         f"{point.date}: {point.close}" for point in snapshot.history[-5:]
@@ -161,3 +282,45 @@ def _user_prompt(snapshot: TickerSnapshot) -> str:
         f"Recent closes: {history_text}\n"
         "Use claim_id values BULL-1/BULL-2/BULL-3 or BEAR-1/BEAR-2/BEAR-3 as appropriate."
     )
+
+
+def _rebuttal_user_prompt(
+    snapshot: TickerSnapshot,
+    own_round: OpeningRound,
+    opponent_round: OpeningRound,
+) -> str:
+    return (
+        f"Ticker: {snapshot.ticker}\n"
+        f"Name: {snapshot.name}\n"
+        f"Current price: {snapshot.price} {snapshot.currency}\n"
+        f"Your opening claims: {own_round.model_dump_json()}\n"
+        f"Opponent opening claims: {opponent_round.model_dump_json()}\n"
+        "Choose exactly two opponent claim_id values as targets."
+    )
+
+
+def _rebuttal_round_schema(target_claim_ids: list[str]) -> dict[str, Any]:
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "side": {"type": "string", "enum": ["bull", "bear"]},
+            "rebuttals": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "target_claim_id": {"type": "string", "enum": target_claim_ids},
+                        "rebuttal": {"type": "string"},
+                        "evidence": {"type": "string"},
+                        "source_url": {"type": "string"},
+                    },
+                    "required": ["target_claim_id", "rebuttal", "evidence", "source_url"],
+                },
+            },
+        },
+        "required": ["side", "rebuttals"],
+    }

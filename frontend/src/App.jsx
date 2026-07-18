@@ -145,7 +145,7 @@ function App() {
     setDebateError("");
 
     try {
-      const response = await fetch("/api/debates/round-one", {
+      const response = await fetch("/api/debates/two-round", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: snapshot.ticker, language: "zh-Hant" }),
@@ -275,10 +275,24 @@ function App() {
       ) : null}
 
       {debate ? (
-        <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
-          <OpeningColumn title="多頭開場" tone="bull" claims={debate.bull.claims} />
-          <OpeningColumn title="空頭開場" tone="bear" claims={debate.bear.claims} />
-        </section>
+        <>
+          <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-10">
+            <OpeningColumn title="多頭開場" tone="bull" claims={debate.bull.claims} />
+            <OpeningColumn title="空頭開場" tone="bear" claims={debate.bear.claims} />
+          </section>
+          <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
+            <RebuttalColumn
+              title="多頭反駁"
+              tone="bull"
+              rebuttals={debate.bull_rebuttals.rebuttals}
+            />
+            <RebuttalColumn
+              title="空頭反駁"
+              tone="bear"
+              rebuttals={debate.bear_rebuttals.rebuttals}
+            />
+          </section>
+        </>
       ) : null}
     </main>
   );
@@ -295,7 +309,11 @@ function OpeningColumn({ title, tone, claims }) {
       <h2 className="text-2xl font-semibold">{title}</h2>
       <div className="mt-5 space-y-4">
         {claims.map((claim) => (
-          <article key={claim.claim_id} className="rounded border border-zinc-700/70 bg-zinc-950/80 p-4">
+          <article
+            key={claim.claim_id}
+            id={`claim-${claim.claim_id}`}
+            className="rounded border border-zinc-700/70 bg-zinc-950/80 p-4"
+          >
             <p className="text-sm font-semibold text-zinc-400">#{claim.claim_id}</p>
             <h3 className="mt-2 text-lg font-semibold text-zinc-100">{claim.claim}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{claim.evidence}</p>
@@ -306,6 +324,44 @@ function OpeningColumn({ title, tone, claims }) {
               rel="noreferrer"
             >
               {claim.source_name}
+            </a>
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RebuttalColumn({ title, tone, rebuttals }) {
+  const toneClass =
+    tone === "bull"
+      ? "border-emerald-400/40 bg-emerald-950/20 text-emerald-100"
+      : "border-red-400/40 bg-red-950/20 text-red-100";
+
+  return (
+    <div className={`rounded-lg border p-6 ${toneClass}`}>
+      <h2 className="text-2xl font-semibold">{title}</h2>
+      <div className="mt-5 space-y-4">
+        {rebuttals.map((rebuttal) => (
+          <article
+            key={`${rebuttal.target_claim_id}-${rebuttal.source_url}`}
+            className="rounded border border-zinc-700/70 bg-zinc-950/80 p-4"
+          >
+            <a
+              className="text-sm font-semibold text-amber-200 underline-offset-4 hover:underline"
+              href={`#claim-${rebuttal.target_claim_id}`}
+            >
+              反駁 → 對方論點 #{rebuttal.target_claim_id}
+            </a>
+            <h3 className="mt-3 text-lg font-semibold text-zinc-100">{rebuttal.rebuttal}</h3>
+            <p className="mt-3 text-sm leading-6 text-zinc-300">{rebuttal.evidence}</p>
+            <a
+              className="mt-4 inline-block break-all text-sm text-amber-200 underline-offset-4 hover:underline"
+              href={rebuttal.source_url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {rebuttal.source_url}
             </a>
           </article>
         ))}
