@@ -226,6 +226,37 @@ def test_judged_debate_endpoint_returns_scores(monkeypatch) -> None:
     assert len(body["judge"]["scores"]) == 10
 
 
+def test_provider_error_endpoint_returns_json_detail(monkeypatch) -> None:
+    monkeypatch.setattr(debate, "get_ticker_snapshot", lambda _ticker: _snapshot())
+
+    def raise_provider_error(*_args, **_kwargs):
+        raise debate.DebateProviderError(
+            "OpenAI API quota exceeded. Check billing, credits, or project limits.",
+            status_code=429,
+        )
+
+    monkeypatch.setattr(debate, "generate_opening_for_side", raise_provider_error)
+    client = TestClient(app)
+
+    response = client.post("/api/debates/round-one", json={"ticker": "NVDA"})
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["message"] == (
+        "OpenAI API quota exceeded. Check billing, credits, or project limits."
+    )
+
+
+def test_openai_insufficient_quota_maps_to_provider_error() -> None:
+    exc = debate.OpenAIError("quota")
+    exc.status_code = 429
+    exc.body = {"error": {"code": "insufficient_quota"}}
+
+    provider_error = debate._provider_error_from_openai(exc)
+
+    assert provider_error.status_code == 429
+    assert "quota exceeded" in str(provider_error)
+
+
 def test_judge_flags_unverifiable_fixture(monkeypatch) -> None:
     bull_round = debate.OpeningRound(
         side="bull",

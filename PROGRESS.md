@@ -351,3 +351,27 @@
 
 ### 下一步
 - 重啟後端後，若辯論仍失敗，預期錯誤應從 `OPENAI_API_KEY is not configured` 變成 OpenAI 帳號額度相關的 `429 insufficient_quota`，需由 billing/quota 處理。
+
+## 2026-07-18 API 錯誤 JSON 化與前端容錯
+
+### 做了什麼
+- 修正 OpenAI SDK exception 沒被後端捕捉時會變成 plain-text `Internal Server Error` 的問題。
+- 新增 `DebateProviderError`，將 OpenAI provider 錯誤轉成 JSON HTTP response。
+- 針對 `insufficient_quota`、authentication、model not found、rate limit 等常見錯誤提供更明確的訊息與 HTTP status。
+- 前端新增 API response 解析 helper；若後端或 proxy 回傳非 JSON 文字，也會顯示友善 fallback 錯誤，不再出現 `Unexpected token 'I'`。
+- 新增測試覆蓋 provider error JSON response 與前端 non-JSON server error fallback。
+
+### 關鍵決定
+- 後端仍不暴露 stack trace 或 secret，只回傳可行動的公開錯誤訊息。
+- 前端優先顯示後端 JSON `detail.message`，只有 response 不是 JSON 時才使用 i18n fallback。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，16 passed。
+- `npm.cmd test`：通過，6 passed。
+- `npm.cmd run build`：通過。
+
+### 遇到的問題
+- 此修正會消除 `Unexpected token 'I'` 類型的前端解析錯誤；若 OpenAI 帳號仍無額度，UI 應顯示 quota/billing 相關訊息。
+
+### 下一步
+- 重啟後端與前端後再次測試辯論流程，確認畫面顯示的是實際 OpenAI provider 錯誤，而不是 JSON parse 錯誤。

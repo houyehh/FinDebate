@@ -18,6 +18,35 @@ function formatPrice(price, currency, language = "zh-Hant") {
   }).format(price);
 }
 
+async function readApiResponse(response, fallbackMessage) {
+  if (typeof response.text === "function") {
+    const bodyText = await response.text();
+    if (!bodyText) {
+      return {};
+    }
+
+    try {
+      return JSON.parse(bodyText);
+    } catch {
+      throw new Error(fallbackMessage);
+    }
+  }
+
+  try {
+    return await response.json();
+  } catch {
+    throw new Error(fallbackMessage);
+  }
+}
+
+function apiErrorMessage(payload, fallbackMessage) {
+  if (typeof payload?.detail === "string") {
+    return payload.detail;
+  }
+
+  return payload?.detail?.message || payload?.message || fallbackMessage;
+}
+
 function PriceLine({ history }) {
   if (!history?.length) {
     return null;
@@ -137,10 +166,10 @@ function App() {
 
     try {
       const response = await fetch(`/api/tickers/${encodeURIComponent(normalizedTicker)}`);
-      const data = await response.json();
+      const data = await readApiResponse(response, t.tickerNotFound);
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || t.tickerNotFound);
+        throw new Error(apiErrorMessage(data, t.tickerNotFound));
       }
 
       setSnapshot(data);
@@ -164,10 +193,10 @@ function App() {
 
     try {
       const response = await fetch("/api/records");
-      const data = await response.json();
+      const data = await readApiResponse(response, t.recordsFailed);
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || t.recordsFailed);
+        throw new Error(apiErrorMessage(data, t.recordsFailed));
       }
 
       setRecordsData(data);
@@ -192,10 +221,10 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: snapshot.ticker, language }),
       });
-      const data = await response.json();
+      const data = await readApiResponse(response, t.debateFailed);
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || t.debateFailed);
+        throw new Error(apiErrorMessage(data, t.debateFailed));
       }
 
       setDebate(data);
@@ -237,10 +266,10 @@ function App() {
           note,
         }),
       });
-      const data = await response.json();
+      const data = await readApiResponse(response, t.verdictFailed);
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || t.verdictFailed);
+        throw new Error(apiErrorMessage(data, t.verdictFailed));
       }
 
       setVerdictResult(data);

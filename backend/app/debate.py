@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Literal
 
-from openai import OpenAI
+from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.market_data import TickerSnapshot, get_ticker_snapshot
@@ -88,6 +88,12 @@ class DebateGenerationError(Exception):
 
 class DebateConfigurationError(DebateGenerationError):
     pass
+
+
+class DebateProviderError(DebateGenerationError):
+    def __init__(self, message: str, status_code: int = 502) -> None:
+        super().__init__(message)
+        self.status_code = status_code
 
 
 OPENING_ROUND_SCHEMA: dict[str, Any] = {
@@ -237,12 +243,7 @@ def generate_judge_for_debate(debate: TwoRoundDebate, language: str) -> JudgeRes
 
 
 def _call_openai_opening(side: Side, snapshot: TickerSnapshot, language: str) -> dict[str, Any]:
-    api_key = get_openai_api_key()
-    if not api_key:
-        raise DebateConfigurationError("OPENAI_API_KEY is not configured.")
-
-    client = OpenAI(api_key=api_key)
-    response = client.responses.create(
+    response = _create_openai_response(
         model=OPENAI_MODEL,
         input=[
             {"role": "system", "content": _system_prompt(side, language)},
@@ -268,12 +269,7 @@ def _call_openai_rebuttals(
     opponent_round: OpeningRound,
     language: str,
 ) -> dict[str, Any]:
-    api_key = get_openai_api_key()
-    if not api_key:
-        raise DebateConfigurationError("OPENAI_API_KEY is not configured.")
-
-    client = OpenAI(api_key=api_key)
-    response = client.responses.create(
+    response = _create_openai_response(
         model=OPENAI_MODEL,
         input=[
             {"role": "system", "content": _rebuttal_system_prompt(side, language)},
@@ -297,13 +293,8 @@ def _call_openai_rebuttals(
 
 
 def _call_openai_judge(debate: TwoRoundDebate, language: str) -> dict[str, Any]:
-    api_key = get_openai_api_key()
-    if not api_key:
-        raise DebateConfigurationError("OPENAI_API_KEY is not configured.")
-
     items = _judge_items(debate)
-    client = OpenAI(api_key=api_key)
-    response = client.responses.create(
+    response = _create_openai_response(
         model=OPENAI_MODEL,
         input=[
             {"role": "system", "content": _judge_system_prompt(language)},
@@ -321,6 +312,56 @@ def _call_openai_judge(debate: TwoRoundDebate, language: str) -> dict[str, Any]:
     )
 
     return json.loads(response.output_text)
+
+
+def _create_openai_response(**kwargs: Any) -> Any:
+    api_key = get_openai_api_key()
+    if not api_key:
+        raise DebateConfigurationError("OPENAI_API_KEY is not configured.")
+
+    client = OpenAI(api_key=api_key)
+    try:
+        return client.responses.create(**kwargs)
+    except OpenAIError as exc:
+        raise _provider_error_from_openai(exc) from exc
+
+
+def _provider_error_from_openai(exc: OpenAIError) -> DebateProviderError:
+    status_code = getattr(exc, "status_code", None) or 502
+    error_code = _openai_error_code(exc)
+
+    if error_code == "insufficient_quota":
+        return DebateProviderError(
+            "OpenAI API quota exceeded. Check billing, credits, or project limits.",
+            status_code=429,
+        )
+    if status_code == 401:
+        return DebateProviderError("OpenAI API authentication failed. Check OPENAI_API_KEY.", status_code=401)
+    if status_code == 404:
+        return DebateProviderError(
+            f"OpenAI model '{OPENAI_MODEL}' is not available for this API key.",
+            status_code=404,
+        )
+    if status_code == 429:
+        return DebateProviderError("OpenAI API rate limit reached. Please try again later.", status_code=429)
+
+    return DebateProviderError("OpenAI API request failed. Please try again.", status_code=status_code)
+
+
+def _openai_error_code(exc: OpenAIError) -> str | None:
+    body = getattr(exc, "body", None)
+    if isinstance(body, dict):
+        error = body.get("error")
+        if isinstance(error, dict):
+            code = error.get("code")
+            if isinstance(code, str):
+                return code
+        code = body.get("code")
+        if isinstance(code, str):
+            return code
+
+    code = getattr(exc, "code", None)
+    return code if isinstance(code, str) else None
 
 
 def _system_prompt(side: Side, language: str) -> str:

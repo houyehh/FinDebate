@@ -370,6 +370,23 @@ describe("App", () => {
     expect(screen.getByText(/你與裁判同邊/)).toBeInTheDocument();
   });
 
+  it("shows a friendly debate error when the server returns non-json text", async () => {
+    render(<App />);
+
+    fireEvent.submit(screen.getByRole("button", { name: "查詢" }).closest("form"));
+    await screen.findByText("NVIDIA Corporation");
+
+    global.fetch.mockImplementationOnce(() =>
+      Promise.resolve({
+        ok: false,
+        text: () => Promise.resolve("Internal Server Error"),
+      }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "開始辯論" }));
+
+    expect(await screen.findByText("辯論生成失敗，請稍後再試。")).toBeInTheDocument();
+  });
+
   it("loads the records page with settled scoreboard data", async () => {
     render(<App />);
 

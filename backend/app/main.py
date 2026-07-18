@@ -6,6 +6,7 @@ from app.database import ScoreboardResponse, VerdictRecord, VerdictSide, get_sco
 from app.debate import (
     DebateConfigurationError,
     DebateGenerationError,
+    DebateProviderError,
     JudgedDebate,
     RoundOneDebate,
     TwoRoundDebate,
@@ -74,6 +75,8 @@ def create_round_one_debate(request: RoundOneDebateRequest) -> RoundOneDebate:
         ) from exc
     except DebateConfigurationError as exc:
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
+    except DebateProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"message": str(exc)}) from exc
     except DebateGenerationError as exc:
         raise HTTPException(
             status_code=502,
@@ -95,6 +98,8 @@ def create_two_round_debate(request: RoundOneDebateRequest) -> TwoRoundDebate:
         ) from exc
     except DebateConfigurationError as exc:
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
+    except DebateProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"message": str(exc)}) from exc
     except DebateGenerationError as exc:
         raise HTTPException(
             status_code=502,
@@ -116,6 +121,8 @@ def create_judged_debate(request: RoundOneDebateRequest) -> JudgedDebate:
         ) from exc
     except DebateConfigurationError as exc:
         raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
+    except DebateProviderError as exc:
+        raise HTTPException(status_code=exc.status_code, detail={"message": str(exc)}) from exc
     except DebateGenerationError as exc:
         raise HTTPException(
             status_code=502,
