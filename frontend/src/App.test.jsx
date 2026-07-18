@@ -6,6 +6,7 @@ import App from "./App";
 
 describe("App", () => {
   beforeEach(() => {
+    localStorage.clear();
     global.fetch = vi.fn((url) => {
       if (url === "/api/health") {
         return Promise.resolve({
@@ -380,5 +381,21 @@ describe("App", () => {
     expect(screen.getByText("NVDA")).toBeInTheDocument();
     expect(screen.getByText("110.00 (+10.00%) 勝")).toBeInTheDocument();
     expect(screen.getByText("待結算")).toBeInTheDocument();
+  });
+
+  it("switches UI language and sends the selected debate language", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+
+    expect(screen.getByLabelText("Ticker")).toBeInTheDocument();
+    fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
+    await screen.findByText("NVIDIA Corporation");
+    fireEvent.click(screen.getByRole("button", { name: "Start Debate" }));
+
+    expect(await screen.findByText("Bull Opening")).toBeInTheDocument();
+    const debateCall = global.fetch.mock.calls.find(([url]) => url === "/api/debates/judged");
+    expect(JSON.parse(debateCall[1].body).language).toBe("en");
+    expect(localStorage.getItem("language")).toBe("en");
   });
 });

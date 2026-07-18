@@ -209,3 +209,28 @@
 
 ### 下一步
 - 任務 8：實作 F6 中英切換，UI 文案切換並將語言偏好存入 localStorage。
+
+## 2026-07-18 任務 8：F6 中英切換
+
+### 做了什麼
+- 新增前端簡單 i18n dictionary：`zh-Hant` 與 `en`。
+- 右上角新增 `繁中 / EN` 切換，語言偏好存入 `localStorage`。
+- 首頁、盲判、裁判評分、反駁卡、戰績頁主要 UI 文案改由 dictionary 控制。
+- 新辯論 request 不再固定 `zh-Hant`，會依目前 UI 語言送出 `language`，後端既有 prompt 會依語言輸出中文或英文。
+
+### 關鍵決定
+- 不引入重型 i18n 框架，維持 PRD 要求的簡單 dictionary。
+- 後端不新增語言狀態；語言偏好只存在前端 localStorage，生成時由 request 明確帶給後端。
+
+### 驗收結果
+- `npm.cmd test`：通過，5 passed。
+- `npm.cmd run build`：通過。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，11 passed。
+- 前端測試已確認切換 EN 後 UI label 變成 `Ticker`，並且新辯論 request body 帶 `language: "en"`。
+
+### 遇到的問題
+- 無新增阻塞。
+- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+
+### 下一步
+- 任務 9：UI 打磨，調整配色、間距、圖表美化，並將三頁截圖存入 `screenshots/`。

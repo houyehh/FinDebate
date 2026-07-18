@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+import { dictionaries } from "./i18n";
+
 const healthLabels = {
   checking: "checking",
   ok: "ok",
@@ -8,8 +10,8 @@ const healthLabels = {
 
 const examples = ["NVDA", "2330.TW", "BTC-USD"];
 
-function formatPrice(price, currency) {
-  return new Intl.NumberFormat("zh-TW", {
+function formatPrice(price, currency, language = "zh-Hant") {
+  return new Intl.NumberFormat(language === "en" ? "en-US" : "zh-TW", {
     style: "currency",
     currency: currency === "N/A" ? "USD" : currency,
     maximumFractionDigits: price >= 1000 ? 2 : 4,
@@ -68,6 +70,7 @@ function PriceLine({ history }) {
 }
 
 function App() {
+  const [language, setLanguage] = useState(() => localStorage.getItem("language") || "zh-Hant");
   const [health, setHealth] = useState("checking");
   const [ticker, setTicker] = useState("NVDA");
   const [snapshot, setSnapshot] = useState(null);
@@ -86,6 +89,7 @@ function App() {
   const [recordsState, setRecordsState] = useState("idle");
   const [recordsData, setRecordsData] = useState(null);
   const [recordsError, setRecordsError] = useState("");
+  const t = dictionaries[language] || dictionaries["zh-Hant"];
 
   useEffect(() => {
     let active = true;
@@ -124,7 +128,7 @@ function App() {
     const normalizedTicker = ticker.trim();
 
     if (!normalizedTicker) {
-      setError("請輸入 ticker，例如 NVDA、2330.TW、BTC-USD。");
+      setError(t.tickerRequired);
       return;
     }
 
@@ -136,7 +140,7 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || "查無此標的，請確認 ticker 格式。");
+        throw new Error(data.detail?.message || t.tickerNotFound);
       }
 
       setSnapshot(data);
@@ -163,7 +167,7 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || "戰績讀取失敗，請稍後再試。");
+        throw new Error(data.detail?.message || t.recordsFailed);
       }
 
       setRecordsData(data);
@@ -186,12 +190,12 @@ function App() {
       const response = await fetch("/api/debates/judged", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: snapshot.ticker, language: "zh-Hant" }),
+        body: JSON.stringify({ ticker: snapshot.ticker, language }),
       });
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || "辯論生成失敗，請稍後再試。");
+        throw new Error(data.detail?.message || t.debateFailed);
       }
 
       setDebate(data);
@@ -236,7 +240,7 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail?.message || "站邊儲存失敗，請稍後再試。");
+        throw new Error(data.detail?.message || t.verdictFailed);
       }
 
       setVerdictResult(data);
@@ -246,6 +250,11 @@ function App() {
       setVerdictState("error");
       setDebateError(verdictError.message);
     }
+  }
+
+  function changeLanguage(nextLanguage) {
+    setLanguage(nextLanguage);
+    localStorage.setItem("language", nextLanguage);
   }
 
   return (
@@ -264,7 +273,7 @@ function App() {
                     : "text-zinc-400 hover:text-zinc-100"
                 }`}
               >
-                首頁
+                {t.navHome}
               </button>
               <button
                 type="button"
@@ -275,13 +284,35 @@ function App() {
                     : "text-zinc-400 hover:text-zinc-100"
                 }`}
               >
-                戰績
+                {t.navRecords}
               </button>
             </div>
           </div>
-          <span className="rounded border border-amber-400/40 px-3 py-1 text-sm text-amber-200">
-            API: {healthLabels[health]}
-          </span>
+          <div className="flex items-center gap-3">
+            <div className="flex rounded border border-zinc-700 p-1 text-sm">
+              <button
+                type="button"
+                onClick={() => changeLanguage("zh-Hant")}
+                className={`rounded px-2 py-1 ${
+                  language === "zh-Hant" ? "bg-zinc-800 text-amber-200" : "text-zinc-400"
+                }`}
+              >
+                繁中
+              </button>
+              <button
+                type="button"
+                onClick={() => changeLanguage("en")}
+                className={`rounded px-2 py-1 ${
+                  language === "en" ? "bg-zinc-800 text-amber-200" : "text-zinc-400"
+                }`}
+              >
+                EN
+              </button>
+            </div>
+            <span className="rounded border border-amber-400/40 px-3 py-1 text-sm text-amber-200">
+              API: {healthLabels[health]}
+            </span>
+          </div>
         </div>
       </nav>
 
@@ -289,12 +320,12 @@ function App() {
         <>
       <section className="mx-auto grid max-w-6xl grid-cols-[0.95fr_1.05fr] gap-8 px-8 py-12">
         <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-7">
-          <p className="text-sm uppercase text-amber-200">Ticker lookup</p>
-          <h1 className="mt-3 text-4xl font-semibold">AI 投資多空辯論擂台</h1>
+          <p className="text-sm uppercase text-amber-200">{t.tickerLookup}</p>
+          <h1 className="mt-3 text-4xl font-semibold">{t.appTitle}</h1>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-zinc-300" htmlFor="ticker-input">
-              投資標的
+              {t.tickerLabel}
             </label>
             <div className="flex gap-3">
               <input
@@ -309,7 +340,7 @@ function App() {
                 disabled={lookupState === "loading"}
                 className="h-12 rounded bg-emerald-400 px-5 font-semibold text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
               >
-                {lookupState === "loading" ? "查詢中" : "查詢"}
+                {lookupState === "loading" ? t.searching : t.search}
               </button>
             </div>
           </form>
@@ -345,7 +376,7 @@ function App() {
                 <div className="text-right">
                   <p className="text-sm text-zinc-400">{snapshot.currency}</p>
                   <p className="mt-1 text-3xl font-semibold text-emerald-300">
-                    {formatPrice(snapshot.price, snapshot.currency)}
+                    {formatPrice(snapshot.price, snapshot.currency, language)}
                   </p>
                 </div>
               </div>
@@ -358,12 +389,12 @@ function App() {
                 disabled={debateState === "loading"}
                 className="mt-7 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
               >
-                {debateState === "loading" ? "多空研究中" : "開始辯論"}
+                {debateState === "loading" ? t.researching : t.startDebate}
               </button>
             </>
           ) : (
             <div className="flex h-full min-h-80 items-center justify-center rounded border border-dashed border-zinc-700 text-zinc-400">
-              30 天價格走勢會顯示在這裡
+              {t.chartPlaceholder}
             </div>
           )}
         </div>
@@ -372,7 +403,7 @@ function App() {
       {debateState === "loading" ? (
         <section className="mx-auto max-w-6xl px-8 pb-12">
           <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
-            多頭研究中… 空頭研究中…
+            {t.researchStatus}
           </div>
         </section>
       ) : null}
@@ -389,7 +420,7 @@ function App() {
         <>
           {judgeRevealed ? (
             <section className="mx-auto max-w-6xl px-8 pb-8">
-              <JudgeScoreboard judge={debate.judge} verdictResult={verdictResult} />
+              <JudgeScoreboard judge={debate.judge} verdictResult={verdictResult} t={t} />
             </section>
           ) : (
             <section className="mx-auto max-w-6xl px-8 pb-8">
@@ -403,35 +434,40 @@ function App() {
                 state={verdictState}
                 onSubmit={handleSubmitVerdict}
                 onSkip={() => setJudgeRevealed(true)}
+                t={t}
               />
             </section>
           )}
           <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-10">
             <OpeningColumn
-              title="多頭開場"
+              title={t.bullOpening}
               tone="bull"
               claims={debate.bull.claims}
               scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
+              t={t}
             />
             <OpeningColumn
-              title="空頭開場"
+              title={t.bearOpening}
               tone="bear"
               claims={debate.bear.claims}
               scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
+              t={t}
             />
           </section>
           <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
             <RebuttalColumn
-              title="多頭反駁"
+              title={t.bullRebuttal}
               tone="bull"
               rebuttals={debate.bull_rebuttals.rebuttals}
               scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
+              t={t}
             />
             <RebuttalColumn
-              title="空頭反駁"
+              title={t.bearRebuttal}
               tone="bear"
               rebuttals={debate.bear_rebuttals.rebuttals}
               scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
+              t={t}
             />
           </section>
         </>
@@ -443,6 +479,7 @@ function App() {
           data={recordsData}
           error={recordsError}
           onRefresh={fetchRecords}
+          t={t}
         />
       )}
     </main>
@@ -466,28 +503,29 @@ function VerdictPanel({
   state,
   onSubmit,
   onSkip,
+  t,
 }) {
   return (
     <form className="rounded-lg border border-amber-300/40 bg-zinc-900 p-6" onSubmit={onSubmit}>
       <div className="flex items-start justify-between gap-8">
         <div>
-          <p className="text-sm uppercase text-amber-200">Blind verdict</p>
-          <h2 className="mt-2 text-2xl font-semibold">先站邊，再揭曉裁判評分</h2>
+          <p className="text-sm uppercase text-amber-200">{t.blindVerdict}</p>
+          <h2 className="mt-2 text-2xl font-semibold">{t.blindTitle}</h2>
         </div>
         <button
           type="button"
           onClick={onSkip}
           className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
         >
-          跳過站邊，直接看評分
+          {t.skipVerdict}
         </button>
       </div>
 
       <div className="mt-6 flex gap-3">
         {[
-          ["bull", "看多"],
-          ["bear", "看空"],
-          ["neutral", "中立觀望"],
+          ["bull", t.bullSide],
+          ["bear", t.bearSide],
+          ["neutral", t.neutralSide],
         ].map(([value, label]) => (
           <button
             key={value}
@@ -505,7 +543,7 @@ function VerdictPanel({
       </div>
 
       <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="confidence">
-        信心度 {confidence}
+        {t.confidence} {confidence}
       </label>
       <input
         id="confidence"
@@ -518,7 +556,7 @@ function VerdictPanel({
       />
 
       <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="verdict-note">
-        一句話理由
+        {t.noteLabel}
       </label>
       <textarea
         id="verdict-note"
@@ -532,13 +570,13 @@ function VerdictPanel({
         disabled={state === "saving"}
         className="mt-6 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
       >
-        {state === "saving" ? "儲存中" : "送出站邊"}
+        {state === "saving" ? t.saving : t.submitVerdict}
       </button>
     </form>
   );
 }
 
-function JudgeScoreboard({ judge, verdictResult }) {
+function JudgeScoreboard({ judge, verdictResult, t }) {
   const maxTotal = Math.max(judge.bull_total, judge.bear_total, 1);
   const bullWidth = `${(judge.bull_total / maxTotal) * 100}%`;
   const bearWidth = `${(judge.bear_total / maxTotal) * 100}%`;
@@ -547,12 +585,12 @@ function JudgeScoreboard({ judge, verdictResult }) {
     <div className="rounded-lg border border-amber-300/40 bg-zinc-900 p-6">
       <div className="flex items-start justify-between gap-8">
         <div>
-          <p className="text-sm uppercase text-amber-200">Judge</p>
-          <h2 className="mt-2 text-2xl font-semibold">裁判評分</h2>
+          <p className="text-sm uppercase text-amber-200">{t.judge}</p>
+          <h2 className="mt-2 text-2xl font-semibold">{t.judgeScore}</h2>
         </div>
         <div className="text-right text-sm text-zinc-300">
-          <p>多頭 {judge.bull_total}</p>
-          <p>空頭 {judge.bear_total}</p>
+          <p>{t.bull} {judge.bull_total}</p>
+          <p>{t.bear} {judge.bear_total}</p>
         </div>
       </div>
       <div className="mt-5 space-y-3">
@@ -566,23 +604,23 @@ function JudgeScoreboard({ judge, verdictResult }) {
       <p className="mt-5 text-sm leading-6 text-zinc-300">{judge.summary}</p>
       {verdictResult ? (
         <p className="mt-4 rounded border border-amber-300/40 bg-amber-950/20 p-3 text-sm text-amber-100">
-          {verdictResult.judge_agreement ? "你與裁判同邊" : "你與裁判不同邊"}，裁判傾向：
+          {verdictResult.judge_agreement ? t.sameSide : t.differentSide} {t.judgeTilt}
           {verdictResult.judge_side === "bull"
-            ? "看多"
+            ? t.bullSide
             : verdictResult.judge_side === "bear"
-              ? "看空"
-              : "中立"}
+              ? t.bearSide
+              : t.neutralSide}
         </p>
       ) : (
         <p className="mt-4 rounded border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-300">
-          已跳過站邊，本場不計入戰績
+          {t.skipped}
         </p>
       )}
     </div>
   );
 }
 
-function OpeningColumn({ title, tone, claims, scoreMap }) {
+function OpeningColumn({ title, tone, claims, scoreMap, t }) {
   const toneClass =
     tone === "bull"
       ? "border-emerald-400/40 bg-emerald-950/20 text-emerald-100"
@@ -601,7 +639,7 @@ function OpeningColumn({ title, tone, claims, scoreMap }) {
             <p className="text-sm font-semibold text-zinc-400">#{claim.claim_id}</p>
             <h3 className="mt-2 text-lg font-semibold text-zinc-100">{claim.claim}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{claim.evidence}</p>
-            <ScoreStrip score={scoreMap[claim.claim_id]} />
+            <ScoreStrip score={scoreMap[claim.claim_id]} t={t} />
             <a
               className="mt-4 inline-block text-sm text-amber-200 underline-offset-4 hover:underline"
               href={claim.source_url}
@@ -617,7 +655,7 @@ function OpeningColumn({ title, tone, claims, scoreMap }) {
   );
 }
 
-function RebuttalColumn({ title, tone, rebuttals, scoreMap }) {
+function RebuttalColumn({ title, tone, rebuttals, scoreMap, t }) {
   const toneClass =
     tone === "bull"
       ? "border-emerald-400/40 bg-emerald-950/20 text-emerald-100"
@@ -638,11 +676,11 @@ function RebuttalColumn({ title, tone, rebuttals, scoreMap }) {
               className="text-sm font-semibold text-amber-200 underline-offset-4 hover:underline"
               href={`#claim-${rebuttal.target_claim_id}`}
             >
-              反駁 → 對方論點 #{rebuttal.target_claim_id}
+              {t.rebuttalTarget} #{rebuttal.target_claim_id}
             </a>
             <h3 className="mt-3 text-lg font-semibold text-zinc-100">{rebuttal.rebuttal}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{rebuttal.evidence}</p>
-            <ScoreStrip score={scoreMap[itemId]} />
+            <ScoreStrip score={scoreMap[itemId]} t={t} />
             <a
               className="mt-4 inline-block break-all text-sm text-amber-200 underline-offset-4 hover:underline"
               href={rebuttal.source_url}
@@ -659,7 +697,7 @@ function RebuttalColumn({ title, tone, rebuttals, scoreMap }) {
   );
 }
 
-function ScoreStrip({ score }) {
+function ScoreStrip({ score, t }) {
   if (!score) {
     return null;
   }
@@ -667,9 +705,9 @@ function ScoreStrip({ score }) {
   return (
     <div className="mt-4 rounded border border-zinc-700 bg-zinc-900 p-3 text-sm text-zinc-300">
       <div className="flex gap-4">
-        <span>證據 {score.evidence_score}</span>
-        <span>來源 {score.source_score}</span>
-        <span>邏輯 {score.logic_score}</span>
+        <span>{t.evidence} {score.evidence_score}</span>
+        <span>{t.source} {score.source_score}</span>
+        <span>{t.logic} {score.logic_score}</span>
       </div>
       {score.flag === "unverifiable" ? (
         <p className="mt-2 text-amber-200">unverifiable：{score.flag_reason}</p>
@@ -678,12 +716,12 @@ function ScoreStrip({ score }) {
   );
 }
 
-function RecordsPage({ state, data, error, onRefresh }) {
+function RecordsPage({ state, data, error, onRefresh, t }) {
   if (state === "loading" && !data) {
     return (
       <section className="mx-auto max-w-6xl px-8 py-12">
         <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
-          戰績刷新中
+          {t.loadingRecords}
         </div>
       </section>
     );
@@ -706,31 +744,31 @@ function RecordsPage({ state, data, error, onRefresh }) {
     <section className="mx-auto max-w-6xl px-8 py-12">
       <div className="flex items-start justify-between gap-8">
         <div>
-          <p className="text-sm uppercase text-amber-200">Scoreboard</p>
-          <h1 className="mt-2 text-4xl font-semibold">判斷力戰績</h1>
+          <p className="text-sm uppercase text-amber-200">{t.scoreboard}</p>
+          <h1 className="mt-2 text-4xl font-semibold">{t.recordsTitle}</h1>
         </div>
         <button
           type="button"
           onClick={onRefresh}
           className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
         >
-          刷新
+          {t.refresh}
         </button>
       </div>
 
       {stats ? (
         <div className="mt-8 grid grid-cols-4 gap-4">
-          <StatBox label="總判斷數" value={stats.total_verdicts} />
-          <StatBox label="7日勝率" value={formatPercent(stats.win_rate_7d)} />
-          <StatBox label="與裁判一致率" value={formatPercent(stats.judge_agreement_rate)} />
+          <StatBox label={t.totalVerdicts} value={stats.total_verdicts} />
+          <StatBox label={t.winRate7d} value={formatPercent(stats.win_rate_7d, t)} />
+          <StatBox label={t.judgeAgreementRate} value={formatPercent(stats.judge_agreement_rate, t)} />
           <StatBox
-            label="多/空/中立"
+            label={t.distribution}
             value={`${stats.bull_count}/${stats.bear_count}/${stats.neutral_count}`}
           />
-          <StatBox label="高信心勝率" value={formatPercent(stats.high_confidence_win_rate_7d)} />
-          <StatBox label="低信心勝率" value={formatPercent(stats.low_confidence_win_rate_7d)} />
-          <StatBox label="同邊勝率" value={formatPercent(stats.aligned_win_rate_7d)} />
-          <StatBox label="不同邊勝率" value={formatPercent(stats.unaligned_win_rate_7d)} />
+          <StatBox label={t.highConfidenceWinRate} value={formatPercent(stats.high_confidence_win_rate_7d, t)} />
+          <StatBox label={t.lowConfidenceWinRate} value={formatPercent(stats.low_confidence_win_rate_7d, t)} />
+          <StatBox label={t.alignedWinRate} value={formatPercent(stats.aligned_win_rate_7d, t)} />
+          <StatBox label={t.unalignedWinRate} value={formatPercent(stats.unaligned_win_rate_7d, t)} />
         </div>
       ) : null}
 
@@ -738,35 +776,35 @@ function RecordsPage({ state, data, error, onRefresh }) {
         <table className="w-full border-collapse bg-zinc-900 text-left text-sm">
           <thead className="bg-zinc-950 text-zinc-400">
             <tr>
-              <th className="px-4 py-3">標的</th>
-              <th className="px-4 py-3">方向</th>
-              <th className="px-4 py-3">信心</th>
-              <th className="px-4 py-3">判斷價</th>
-              <th className="px-4 py-3">1日</th>
-              <th className="px-4 py-3">7日</th>
-              <th className="px-4 py-3">30日</th>
-              <th className="px-4 py-3">裁判</th>
+              <th className="px-4 py-3">{t.tableTicker}</th>
+              <th className="px-4 py-3">{t.tableSide}</th>
+              <th className="px-4 py-3">{t.tableConfidence}</th>
+              <th className="px-4 py-3">{t.tablePrice}</th>
+              <th className="px-4 py-3">{t.table1d}</th>
+              <th className="px-4 py-3">{t.table7d}</th>
+              <th className="px-4 py-3">{t.table30d}</th>
+              <th className="px-4 py-3">{t.tableJudge}</th>
             </tr>
           </thead>
           <tbody>
             {records.map((record) => (
               <tr key={record.id} className="border-t border-zinc-800 text-zinc-200">
                 <td className="px-4 py-4 font-semibold">{record.ticker}</td>
-                <td className="px-4 py-4">{sideLabel(record.side)}</td>
+                <td className="px-4 py-4">{sideLabel(record.side, t)}</td>
                 <td className="px-4 py-4">{record.confidence}</td>
                 <td className="px-4 py-4">{record.price_at_verdict.toFixed(2)}</td>
-                <td className="px-4 py-4">{settlementLabel(record, "1d")}</td>
-                <td className="px-4 py-4">{settlementLabel(record, "7d")}</td>
-                <td className="px-4 py-4">{settlementLabel(record, "30d")}</td>
+                <td className="px-4 py-4">{settlementLabel(record, "1d", t)}</td>
+                <td className="px-4 py-4">{settlementLabel(record, "7d", t)}</td>
+                <td className="px-4 py-4">{settlementLabel(record, "30d", t)}</td>
                 <td className="px-4 py-4">
-                  {record.judge_agreement ? "同邊" : "不同邊"}
+                  {record.judge_agreement ? t.same : t.different}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
         {records.length === 0 ? (
-          <div className="bg-zinc-900 p-8 text-center text-zinc-400">尚無戰績</div>
+          <div className="bg-zinc-900 p-8 text-center text-zinc-400">{t.noRecords}</div>
         ) : null}
       </div>
     </section>
@@ -782,37 +820,37 @@ function StatBox({ label, value }) {
   );
 }
 
-function settlementLabel(record, horizon) {
+function settlementLabel(record, horizon, t) {
   const settlement = record.settlements.find((item) => item.horizon === horizon);
   if (!settlement || settlement.result === "pending") {
-    return "待結算";
+    return t.pending;
   }
   const pct = `${settlement.pct_change > 0 ? "+" : ""}${settlement.pct_change.toFixed(2)}%`;
-  return `${settlement.settle_price.toFixed(2)} (${pct}) ${resultLabel(settlement.result)}`;
+  return `${settlement.settle_price.toFixed(2)} (${pct}) ${resultLabel(settlement.result, t)}`;
 }
 
-function resultLabel(result) {
+function resultLabel(result, t) {
   if (result === "win") {
-    return "勝";
+    return t.win;
   }
   if (result === "loss") {
-    return "負";
+    return t.loss;
   }
-  return "平";
+  return t.draw;
 }
 
-function sideLabel(side) {
+function sideLabel(side, t) {
   if (side === "bull") {
-    return "看多";
+    return t.bullSide;
   }
   if (side === "bear") {
-    return "看空";
+    return t.bearSide;
   }
-  return "中立";
+  return t.neutralSide;
 }
 
-function formatPercent(value) {
-  return value == null ? "待累積" : `${value}%`;
+function formatPercent(value, t) {
+  return value == null ? t.unavailable : `${value}%`;
 }
 
 export default App;
