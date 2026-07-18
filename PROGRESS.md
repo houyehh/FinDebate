@@ -173,7 +173,8 @@
 
 ### 遇到的問題
 - pytest 的 `tmp_path` 在目前 Windows sandbox 讀不到使用者 Temp 目錄，已改用 workspace 內 ignored 的 `data/test_*.db` 作為測試資料庫。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `886558c feat: add blind verdict persistence`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 7：實作 F5 戰績與回測 + demo seed，每次打開戰績頁自動刷新未結算項目。
