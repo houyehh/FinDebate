@@ -113,7 +113,8 @@
 
 ### 遇到的問題
 - 目前環境仍沒有 `OPENAI_API_KEY`，因此無法執行真實 OpenAI web search 驗收；已用 mock 測試覆蓋 schema、retry、target validation 與 UI 流程。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `0c2a4ae feat: add rebuttal round`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 5：實作裁判查核與評分，每個論點與反駁都有證據、來源、邏輯三項分數，並能標記 `unverifiable`。
