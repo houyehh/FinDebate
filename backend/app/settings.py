@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6")
+OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
 DATABASE_PATH = os.getenv("DATABASE_PATH", "data/app.db")
 
 

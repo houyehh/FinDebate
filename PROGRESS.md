@@ -303,3 +303,27 @@
 
 ### 下一步
 - 若後續要改用 `main` 作為預設分支，可再由使用者決定是否重新命名分支。
+
+## 2026-07-18 OpenAI API key 診斷與設定修正
+
+### 做了什麼
+- 檢查本機 `.env`，確認有設定 `OPENAI_API_KEY`，且 key 格式為 `sk-proj...`。
+- 使用 OpenAI API 做最小診斷，確認 `gpt-5.6` 不是目前帳號可用的有效 model id。
+- 列出可見模型後，確認 `gpt-5.6-luna`、`gpt-5.6-sol`、`gpt-5.6-terra` 可 retrieve。
+- 將後端預設模型、`.env.example` 與 README 範例改成 `gpt-5.6-luna`。
+- 修復 `.env` 被 UTF-8 BOM 影響導致 Python `dotenv` 讀不到第一行 `OPENAI_API_KEY` 的問題，改成 UTF-8 no BOM。
+
+### 關鍵決定
+- 選用 `gpt-5.6-luna` 作為目前可驗證存在的預設模型，避免繼續使用不存在的 `gpt-5.6`。
+- `.env.example` 保持空白 key，真實 key 僅留在 ignored 的 `.env`。
+
+### 驗收結果
+- Python 設定模組已可讀到 `OPENAI_API_KEY`，且 `OPENAI_MODEL` 為 `gpt-5.6-luna`。
+- `client.models.retrieve("gpt-5.6-luna")`：通過。
+- `client.responses.create(...)`：仍回傳 `429 insufficient_quota`，代表 key/model 已通過本地設定檢查，但帳號或 project 目前沒有可用 API 額度。
+
+### 遇到的問題
+- 目前剩餘阻塞是 OpenAI 帳號/project billing 或 quota，不是程式碼讀不到 key。
+
+### 下一步
+- 使用者需到 OpenAI Platform 檢查 billing、project credits、limits，或換一把有額度的 API key。
