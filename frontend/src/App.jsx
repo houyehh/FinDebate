@@ -145,7 +145,7 @@ function App() {
     setDebateError("");
 
     try {
-      const response = await fetch("/api/debates/two-round", {
+      const response = await fetch("/api/debates/judged", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: snapshot.ticker, language: "zh-Hant" }),
@@ -276,20 +276,35 @@ function App() {
 
       {debate ? (
         <>
+          <section className="mx-auto max-w-6xl px-8 pb-8">
+            <JudgeScoreboard judge={debate.judge} />
+          </section>
           <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-10">
-            <OpeningColumn title="多頭開場" tone="bull" claims={debate.bull.claims} />
-            <OpeningColumn title="空頭開場" tone="bear" claims={debate.bear.claims} />
+            <OpeningColumn
+              title="多頭開場"
+              tone="bull"
+              claims={debate.bull.claims}
+              scoreMap={buildScoreMap(debate.judge)}
+            />
+            <OpeningColumn
+              title="空頭開場"
+              tone="bear"
+              claims={debate.bear.claims}
+              scoreMap={buildScoreMap(debate.judge)}
+            />
           </section>
           <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
             <RebuttalColumn
               title="多頭反駁"
               tone="bull"
               rebuttals={debate.bull_rebuttals.rebuttals}
+              scoreMap={buildScoreMap(debate.judge)}
             />
             <RebuttalColumn
               title="空頭反駁"
               tone="bear"
               rebuttals={debate.bear_rebuttals.rebuttals}
+              scoreMap={buildScoreMap(debate.judge)}
             />
           </section>
         </>
@@ -298,7 +313,44 @@ function App() {
   );
 }
 
-function OpeningColumn({ title, tone, claims }) {
+function buildScoreMap(judge) {
+  return (judge?.scores || []).reduce((map, score) => {
+    map[score.item_id] = score;
+    return map;
+  }, {});
+}
+
+function JudgeScoreboard({ judge }) {
+  const maxTotal = Math.max(judge.bull_total, judge.bear_total, 1);
+  const bullWidth = `${(judge.bull_total / maxTotal) * 100}%`;
+  const bearWidth = `${(judge.bear_total / maxTotal) * 100}%`;
+
+  return (
+    <div className="rounded-lg border border-amber-300/40 bg-zinc-900 p-6">
+      <div className="flex items-start justify-between gap-8">
+        <div>
+          <p className="text-sm uppercase text-amber-200">Judge</p>
+          <h2 className="mt-2 text-2xl font-semibold">裁判評分</h2>
+        </div>
+        <div className="text-right text-sm text-zinc-300">
+          <p>多頭 {judge.bull_total}</p>
+          <p>空頭 {judge.bear_total}</p>
+        </div>
+      </div>
+      <div className="mt-5 space-y-3">
+        <div className="h-3 rounded bg-zinc-800">
+          <div className="h-3 rounded bg-emerald-300" style={{ width: bullWidth }} />
+        </div>
+        <div className="h-3 rounded bg-zinc-800">
+          <div className="h-3 rounded bg-red-300" style={{ width: bearWidth }} />
+        </div>
+      </div>
+      <p className="mt-5 text-sm leading-6 text-zinc-300">{judge.summary}</p>
+    </div>
+  );
+}
+
+function OpeningColumn({ title, tone, claims, scoreMap }) {
   const toneClass =
     tone === "bull"
       ? "border-emerald-400/40 bg-emerald-950/20 text-emerald-100"
@@ -317,6 +369,7 @@ function OpeningColumn({ title, tone, claims }) {
             <p className="text-sm font-semibold text-zinc-400">#{claim.claim_id}</p>
             <h3 className="mt-2 text-lg font-semibold text-zinc-100">{claim.claim}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{claim.evidence}</p>
+            <ScoreStrip score={scoreMap[claim.claim_id]} />
             <a
               className="mt-4 inline-block text-sm text-amber-200 underline-offset-4 hover:underline"
               href={claim.source_url}
@@ -332,7 +385,7 @@ function OpeningColumn({ title, tone, claims }) {
   );
 }
 
-function RebuttalColumn({ title, tone, rebuttals }) {
+function RebuttalColumn({ title, tone, rebuttals, scoreMap }) {
   const toneClass =
     tone === "bull"
       ? "border-emerald-400/40 bg-emerald-950/20 text-emerald-100"
@@ -342,9 +395,11 @@ function RebuttalColumn({ title, tone, rebuttals }) {
     <div className={`rounded-lg border p-6 ${toneClass}`}>
       <h2 className="text-2xl font-semibold">{title}</h2>
       <div className="mt-5 space-y-4">
-        {rebuttals.map((rebuttal) => (
+        {rebuttals.map((rebuttal, index) => {
+          const itemId = `${tone.toUpperCase()}-REB-${index + 1}`;
+          return (
           <article
-            key={`${rebuttal.target_claim_id}-${rebuttal.source_url}`}
+            key={itemId}
             className="rounded border border-zinc-700/70 bg-zinc-950/80 p-4"
           >
             <a
@@ -355,6 +410,7 @@ function RebuttalColumn({ title, tone, rebuttals }) {
             </a>
             <h3 className="mt-3 text-lg font-semibold text-zinc-100">{rebuttal.rebuttal}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{rebuttal.evidence}</p>
+            <ScoreStrip score={scoreMap[itemId]} />
             <a
               className="mt-4 inline-block break-all text-sm text-amber-200 underline-offset-4 hover:underline"
               href={rebuttal.source_url}
@@ -364,8 +420,28 @@ function RebuttalColumn({ title, tone, rebuttals }) {
               {rebuttal.source_url}
             </a>
           </article>
-        ))}
+          );
+        })}
       </div>
+    </div>
+  );
+}
+
+function ScoreStrip({ score }) {
+  if (!score) {
+    return null;
+  }
+
+  return (
+    <div className="mt-4 rounded border border-zinc-700 bg-zinc-900 p-3 text-sm text-zinc-300">
+      <div className="flex gap-4">
+        <span>證據 {score.evidence_score}</span>
+        <span>來源 {score.source_score}</span>
+        <span>邏輯 {score.logic_score}</span>
+      </div>
+      {score.flag === "unverifiable" ? (
+        <p className="mt-2 text-amber-200">unverifiable：{score.flag_reason}</p>
+      ) : null}
     </div>
   );
 }

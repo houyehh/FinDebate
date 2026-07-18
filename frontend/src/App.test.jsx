@@ -32,7 +32,7 @@ describe("App", () => {
         });
       }
 
-      if (url === "/api/debates/two-round") {
+      if (url === "/api/debates/judged") {
         return Promise.resolve({
           ok: true,
           json: () =>
@@ -128,6 +128,113 @@ describe("App", () => {
                   },
                 ],
               },
+              judge: {
+                bull_total: 60,
+                bear_total: 60,
+                summary: "Both sides cite evidence.",
+                scores: [
+                  {
+                    item_id: "BULL-1",
+                    side: "bull",
+                    item_type: "claim",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BULL-2",
+                    side: "bull",
+                    item_type: "claim",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BULL-3",
+                    side: "bull",
+                    item_type: "claim",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BEAR-1",
+                    side: "bear",
+                    item_type: "claim",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "unverifiable",
+                    flag_reason: "Cannot verify the source.",
+                  },
+                  {
+                    item_id: "BEAR-2",
+                    side: "bear",
+                    item_type: "claim",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BEAR-3",
+                    side: "bear",
+                    item_type: "claim",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BULL-REB-1",
+                    side: "bull",
+                    item_type: "rebuttal",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BULL-REB-2",
+                    side: "bull",
+                    item_type: "rebuttal",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BEAR-REB-1",
+                    side: "bear",
+                    item_type: "rebuttal",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                  {
+                    item_id: "BEAR-REB-2",
+                    side: "bear",
+                    item_type: "rebuttal",
+                    evidence_score: 4,
+                    source_score: 3,
+                    logic_score: 5,
+                    flag: "none",
+                    flag_reason: "",
+                  },
+                ],
+              },
             }),
         });
       }
@@ -178,5 +285,8 @@ describe("App", () => {
     expect(screen.getByText("空頭反駁")).toBeInTheDocument();
     expect(screen.getByText("Bull rebuttal 1")).toBeInTheDocument();
     expect(screen.getByText("反駁 → 對方論點 #BEAR-1")).toBeInTheDocument();
+    expect(screen.getByText("裁判評分")).toBeInTheDocument();
+    expect(screen.getAllByText("證據 4").length).toBeGreaterThan(0);
+    expect(screen.getByText("unverifiable：Cannot verify the source.")).toBeInTheDocument();
   });
 });

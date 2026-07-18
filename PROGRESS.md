@@ -118,3 +118,32 @@
 
 ### 下一步
 - 任務 5：實作裁判查核與評分，每個論點與反駁都有證據、來源、邏輯三項分數，並能標記 `unverifiable`。
+
+## 2026-07-18 任務 5：F3 裁判查核與評分
+
+### 做了什麼
+- 新增裁判評分 schema：每個 claim/rebuttal 都有 `evidence_score`、`source_score`、`logic_score`、`flag`、`flag_reason`。
+- 新增 Judge agent 呼叫，使用 web search 查核來源與可驗證性，並要求 JSON schema 輸出。
+- 後端驗證裁判輸出必須完整覆蓋所有辯論項目且 item id 不可重複；驗證失敗自動重試 1 次。
+- Bull/Bear 總分由後端依每項三個小分加總，避免模型輸出總分與細項不一致。
+- 新增 `POST /api/debates/judged`，回傳完整兩輪辯論與裁判評分。
+- 前端新增裁判總分對比條、裁判總評、每張論點/反駁卡片的小分與 `unverifiable` 旗標顯示。
+
+### 關鍵決定
+- Rebuttal 本身沒有 PRD 指定的 id，後端固定產生 `BULL-REB-1`、`BULL-REB-2`、`BEAR-REB-1`、`BEAR-REB-2` 供裁判與前端對應。
+- 第 5 項先顯示裁判分數；任務 6 會改成「站邊前隱藏，送出後揭曉」。
+- 裁判不輸出投資結論，只輸出證據品質總評。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，9 passed。
+- `npm.cmd test`：通過，3 passed。
+- `npm.cmd run build`：通過。
+- Mock 驗收已確認每個論點與反駁都有三項小分。
+- 人工捏造論點 fixture 已確認可被標記為 `unverifiable`。
+
+### 遇到的問題
+- 目前環境仍沒有 `OPENAI_API_KEY`，因此無法執行真實 Judge agent + web search 驗收；已用 mock 測試覆蓋 schema、retry、完整覆蓋檢查、`unverifiable` flag 與 UI 流程。
+- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+
+### 下一步
+- 任務 6：實作 F4 盲判站邊，站邊送出前隱藏裁判分數，送出後揭曉並寫入 SQLite。

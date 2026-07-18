@@ -5,8 +5,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.debate import (
     DebateConfigurationError,
     DebateGenerationError,
+    JudgedDebate,
     RoundOneDebate,
     TwoRoundDebate,
+    generate_judged_debate,
     generate_round_one_debate,
     generate_two_round_debate,
 )
@@ -89,4 +91,25 @@ def create_two_round_debate(request: RoundOneDebateRequest) -> TwoRoundDebate:
         raise HTTPException(
             status_code=502,
             detail={"message": "Debate generation failed. Please try again."},
+        ) from exc
+
+
+@app.post("/api/debates/judged", response_model=JudgedDebate)
+def create_judged_debate(request: RoundOneDebateRequest) -> JudgedDebate:
+    try:
+        return generate_judged_debate(request.ticker, request.language)
+    except TickerLookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": exc.message,
+                "examples": ["NVDA", "2330.TW", "BTC-USD"],
+            },
+        ) from exc
+    except DebateConfigurationError as exc:
+        raise HTTPException(status_code=503, detail={"message": str(exc)}) from exc
+    except DebateGenerationError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail={"message": "Judge scoring failed. Please try again."},
         ) from exc

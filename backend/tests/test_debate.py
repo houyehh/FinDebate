@@ -26,6 +26,19 @@ def _rebuttal(side: str, target: str, index: int) -> dict[str, str]:
     }
 
 
+def _judge_score(item_id: str, side: str, item_type: str, flag: str = "none") -> dict:
+    return {
+        "item_id": item_id,
+        "side": side,
+        "item_type": item_type,
+        "evidence_score": 4,
+        "source_score": 3,
+        "logic_score": 5,
+        "flag": flag,
+        "flag_reason": "Cannot verify the claim." if flag == "unverifiable" else "",
+    }
+
+
 def _snapshot() -> TickerSnapshot:
     return TickerSnapshot(
         ticker="NVDA",
@@ -158,3 +171,120 @@ def test_rebuttal_generation_retries_once_after_invalid_target(monkeypatch) -> N
     assert rebuttal_round.side == "bull"
     assert len(rebuttal_round.rebuttals) == 2
     assert calls == []
+
+
+def test_judged_debate_endpoint_returns_scores(monkeypatch) -> None:
+    monkeypatch.setattr(debate, "get_ticker_snapshot", lambda _ticker: _snapshot())
+    monkeypatch.setattr(
+        debate,
+        "generate_opening_for_side",
+        lambda side, _snapshot, _language: debate.OpeningRound(
+            side=side,
+            claims=[_claim(side, index) for index in range(1, 4)],
+        ),
+    )
+    monkeypatch.setattr(
+        debate,
+        "generate_rebuttals_for_side",
+        lambda side, _snapshot, own_round, opponent_round, language: debate.RebuttalRound(
+            side=side,
+            rebuttals=[
+                _rebuttal(side, opponent_round.claims[0].claim_id, 1),
+                _rebuttal(side, opponent_round.claims[1].claim_id, 2),
+            ],
+        ),
+    )
+    monkeypatch.setattr(
+        debate,
+        "generate_judge_for_debate",
+        lambda two_round, _language: debate.JudgeResult(
+            scores=[
+                debate.JudgeItemScore(**_judge_score("BULL-1", "bull", "claim")),
+                debate.JudgeItemScore(**_judge_score("BULL-2", "bull", "claim")),
+                debate.JudgeItemScore(**_judge_score("BULL-3", "bull", "claim")),
+                debate.JudgeItemScore(**_judge_score("BEAR-1", "bear", "claim")),
+                debate.JudgeItemScore(**_judge_score("BEAR-2", "bear", "claim")),
+                debate.JudgeItemScore(**_judge_score("BEAR-3", "bear", "claim")),
+                debate.JudgeItemScore(**_judge_score("BULL-REB-1", "bull", "rebuttal")),
+                debate.JudgeItemScore(**_judge_score("BULL-REB-2", "bull", "rebuttal")),
+                debate.JudgeItemScore(**_judge_score("BEAR-REB-1", "bear", "rebuttal")),
+                debate.JudgeItemScore(**_judge_score("BEAR-REB-2", "bear", "rebuttal")),
+            ],
+            bull_total=60,
+            bear_total=60,
+            summary="Both sides cite evidence.",
+        ),
+    )
+    client = TestClient(app)
+
+    response = client.post("/api/debates/judged", json={"ticker": "NVDA"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["judge"]["bull_total"] == 60
+    assert body["judge"]["bear_total"] == 60
+    assert len(body["judge"]["scores"]) == 10
+
+
+def test_judge_flags_unverifiable_fixture(monkeypatch) -> None:
+    bull_round = debate.OpeningRound(
+        side="bull",
+        claims=[
+            _claim("bull", 1),
+            {
+                **_claim("bull", 2),
+                "claim": "NVIDIA acquired a fictional exchange on Mars in 2099.",
+            },
+            _claim("bull", 3),
+        ],
+    )
+    bear_round = debate.OpeningRound(
+        side="bear",
+        claims=[_claim("bear", index) for index in range(1, 4)],
+    )
+    bull_rebuttals = debate.RebuttalRound(
+        side="bull",
+        rebuttals=[_rebuttal("bull", "BEAR-1", 1), _rebuttal("bull", "BEAR-2", 2)],
+    )
+    bear_rebuttals = debate.RebuttalRound(
+        side="bear",
+        rebuttals=[_rebuttal("bear", "BULL-1", 1), _rebuttal("bear", "BULL-2", 2)],
+    )
+    two_round = debate.TwoRoundDebate(
+        ticker="NVDA",
+        language="zh-Hant",
+        generated_at="2026-07-18T00:00:00+00:00",
+        bull=bull_round,
+        bear=bear_round,
+        bull_rebuttals=bull_rebuttals,
+        bear_rebuttals=bear_rebuttals,
+        price_at_debate=123.45,
+        currency="USD",
+    )
+    monkeypatch.setattr(
+        debate,
+        "_call_openai_judge",
+        lambda _debate, _language: {
+            "scores": [
+                _judge_score("BULL-1", "bull", "claim"),
+                _judge_score("BULL-2", "bull", "claim", flag="unverifiable"),
+                _judge_score("BULL-3", "bull", "claim"),
+                _judge_score("BEAR-1", "bear", "claim"),
+                _judge_score("BEAR-2", "bear", "claim"),
+                _judge_score("BEAR-3", "bear", "claim"),
+                _judge_score("BULL-REB-1", "bull", "rebuttal"),
+                _judge_score("BULL-REB-2", "bull", "rebuttal"),
+                _judge_score("BEAR-REB-1", "bear", "rebuttal"),
+                _judge_score("BEAR-REB-2", "bear", "rebuttal"),
+            ],
+            "summary": "One claim is unverifiable.",
+        },
+    )
+
+    judge = debate.generate_judge_for_debate(two_round, "zh-Hant")
+
+    flagged = [score for score in judge.scores if score.flag == "unverifiable"]
+    assert len(flagged) == 1
+    assert flagged[0].item_id == "BULL-2"
+    assert judge.bull_total == 60
+    assert judge.bear_total == 60
