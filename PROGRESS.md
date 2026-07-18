@@ -327,3 +327,27 @@
 
 ### 下一步
 - 使用者需到 OpenAI Platform 檢查 billing、project credits、limits，或換一把有額度的 API key。
+
+## 2026-07-18 後端 `.env` 載入路徑修正
+
+### 做了什麼
+- 修正 `backend/app/settings.py`，不再依賴 uvicorn 啟動時的 current working directory。
+- 以 `settings.py` 檔案位置反推專案根目錄，固定讀取 repo root 的 `.env`。
+- 增加 fallback：若 OS env 變數是空值或只有空白，會改讀 `.env` 中的值。
+- 新增 settings 測試，覆蓋 root `.env` 路徑、空白 OS env fallback、UTF-8 BOM 清理。
+
+### 關鍵決定
+- 保留「非空 OS env 優先於 `.env`」的慣例；只有空值才 fallback 到 `.env`。
+- 不新增 debug endpoint，避免把環境設定暴露到 API surface。
+
+### 驗收結果
+- 從 repo root 執行設定檢查：可讀到 `OPENAI_API_KEY` 與 `OPENAI_MODEL=gpt-5.6-luna`。
+- 從 `backend` 目錄執行設定檢查：仍會讀取 repo root `.env`，可讀到 key。
+- 模擬空白 OS env：可 fallback 到 `.env` 的 key。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，14 passed。
+
+### 遇到的問題
+- 本機 `127.0.0.1:8000` 仍有舊後端 process 在回應；使用者需要停止原本啟動後端的終端機並重啟，才會吃到新程式碼。
+
+### 下一步
+- 重啟後端後，若辯論仍失敗，預期錯誤應從 `OPENAI_API_KEY is not configured` 變成 OpenAI 帳號額度相關的 `429 insufficient_quota`，需由 billing/quota 處理。
