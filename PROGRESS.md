@@ -230,7 +230,8 @@
 
 ### 遇到的問題
 - 無新增阻塞。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `221ece3 feat: add bilingual UI`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 9：UI 打磨，調整配色、間距、圖表美化，並將三頁截圖存入 `screenshots/`。
