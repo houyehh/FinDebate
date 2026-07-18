@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
+from app.database import VerdictRecord, VerdictSide, save_verdict
 from app.debate import (
     DebateConfigurationError,
     DebateGenerationError,
@@ -50,6 +51,13 @@ def read_ticker(ticker: str) -> TickerSnapshot:
 class RoundOneDebateRequest(BaseModel):
     ticker: str = Field(min_length=1)
     language: str = "zh-Hant"
+
+
+class VerdictSubmitRequest(BaseModel):
+    debate: JudgedDebate
+    side: VerdictSide
+    confidence: int = Field(ge=1, le=5)
+    note: str = ""
 
 
 @app.post("/api/debates/round-one", response_model=RoundOneDebate)
@@ -113,3 +121,13 @@ def create_judged_debate(request: RoundOneDebateRequest) -> JudgedDebate:
             status_code=502,
             detail={"message": "Judge scoring failed. Please try again."},
         ) from exc
+
+
+@app.post("/api/verdicts", response_model=VerdictRecord)
+def submit_verdict(request: VerdictSubmitRequest) -> VerdictRecord:
+    return save_verdict(
+        debate=request.debate,
+        side=request.side,
+        confidence=request.confidence,
+        note=request.note,
+    )

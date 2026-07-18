@@ -7,6 +7,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.6")
+DATABASE_PATH = os.getenv("DATABASE_PATH", "data/app.db")
 
 
 def get_openai_api_key() -> str | None:

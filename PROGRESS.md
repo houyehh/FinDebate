@@ -148,3 +148,32 @@
 
 ### 下一步
 - 任務 6：實作 F4 盲判站邊，站邊送出前隱藏裁判分數，送出後揭曉並寫入 SQLite。
+
+## 2026-07-18 任務 6：F4 盲判站邊
+
+### 做了什麼
+- 新增 SQLite database layer，建立 `debates`、`verdicts`、`settlements` 三張表。
+- 新增 `POST /api/verdicts`，送出站邊時寫入完整 debate、judge scoring、使用者 side/confidence/note、價格快照與裁判一致性。
+- `verdicts` 額外記錄 `judge_side` 與 `judge_agreement`，滿足 F4「與裁判是否一致」需求。
+- 前端改成盲判流程：辯論完成後先隱藏裁判分數，只顯示站邊面板。
+- 使用者送出 `看多` / `看空` / `中立觀望`、信心度與理由後，才揭曉裁判評分並顯示是否與裁判同邊。
+- 新增「跳過站邊，直接看評分」按鈕，跳過時不呼叫 `/api/verdicts`，本場不計入戰績。
+
+### 關鍵決定
+- 送出站邊時才持久化 debate/verdict，避免使用者跳過站邊也被計入戰績。
+- `price_at_verdict` 優先重新抓當下 ticker 價格；抓取失敗時 fallback 到 debate 生成時價格，避免記錄流程中斷。
+- 裁判傾向以 Bull/Bear 總分較高者判定；若平手則為 `neutral`。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，10 passed。
+- `npm.cmd test`：通過，3 passed。
+- `npm.cmd run build`：通過。
+- 前端測試已確認送出站邊前畫面沒有 `裁判評分`，送出後才揭曉。
+- 後端測試已確認 SQLite 可查到完整 debate 與 verdict 紀錄，並正確保存 `judge_agreement`。
+
+### 遇到的問題
+- pytest 的 `tmp_path` 在目前 Windows sandbox 讀不到使用者 Temp 目錄，已改用 workspace 內 ignored 的 `data/test_*.db` 作為測試資料庫。
+- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+
+### 下一步
+- 任務 7：實作 F5 戰績與回測 + demo seed，每次打開戰績頁自動刷新未結算項目。

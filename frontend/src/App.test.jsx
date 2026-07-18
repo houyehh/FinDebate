@@ -239,6 +239,23 @@ describe("App", () => {
         });
       }
 
+      if (url === "/api/verdicts") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: 1,
+              debate_id: 1,
+              side: "bull",
+              confidence: 3,
+              judge_side: "bull",
+              judge_agreement: true,
+              price_at_verdict: 124,
+              created_at: "2026-07-18T00:00:00+00:00",
+            }),
+        });
+      }
+
       return Promise.resolve({
         ok: false,
         json: () =>
@@ -285,8 +302,12 @@ describe("App", () => {
     expect(screen.getByText("空頭反駁")).toBeInTheDocument();
     expect(screen.getByText("Bull rebuttal 1")).toBeInTheDocument();
     expect(screen.getByText("反駁 → 對方論點 #BEAR-1")).toBeInTheDocument();
-    expect(screen.getByText("裁判評分")).toBeInTheDocument();
+    expect(screen.queryByText("裁判評分")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "送出站邊" }));
+
+    expect(await screen.findByText("裁判評分")).toBeInTheDocument();
     expect(screen.getAllByText("證據 4").length).toBeGreaterThan(0);
     expect(screen.getByText("unverifiable：Cannot verify the source.")).toBeInTheDocument();
+    expect(screen.getByText(/你與裁判同邊/)).toBeInTheDocument();
   });
 });

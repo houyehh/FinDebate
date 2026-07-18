@@ -76,6 +76,12 @@ function App() {
   const [debate, setDebate] = useState(null);
   const [debateState, setDebateState] = useState("idle");
   const [debateError, setDebateError] = useState("");
+  const [judgeRevealed, setJudgeRevealed] = useState(false);
+  const [verdictSide, setVerdictSide] = useState("bull");
+  const [confidence, setConfidence] = useState(3);
+  const [note, setNote] = useState("");
+  const [verdictState, setVerdictState] = useState("idle");
+  const [verdictResult, setVerdictResult] = useState(null);
 
   useEffect(() => {
     let active = true;
@@ -127,10 +133,12 @@ function App() {
       setDebate(null);
       setDebateError("");
       setDebateState("idle");
+      resetVerdictState();
       setLookupState("ready");
     } catch (lookupError) {
       setSnapshot(null);
       setDebate(null);
+      resetVerdictState();
       setError(lookupError.message);
       setLookupState("error");
     }
@@ -157,11 +165,56 @@ function App() {
       }
 
       setDebate(data);
+      resetVerdictState();
       setDebateState("ready");
     } catch (debateLookupError) {
       setDebate(null);
+      resetVerdictState();
       setDebateError(debateLookupError.message);
       setDebateState("error");
+    }
+  }
+
+  function resetVerdictState() {
+    setJudgeRevealed(false);
+    setVerdictSide("bull");
+    setConfidence(3);
+    setNote("");
+    setVerdictState("idle");
+    setVerdictResult(null);
+  }
+
+  async function handleSubmitVerdict(event) {
+    event.preventDefault();
+    if (!debate) {
+      return;
+    }
+
+    setVerdictState("saving");
+
+    try {
+      const response = await fetch("/api/verdicts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          debate,
+          side: verdictSide,
+          confidence,
+          note,
+        }),
+      });
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail?.message || "站邊儲存失敗，請稍後再試。");
+      }
+
+      setVerdictResult(data);
+      setJudgeRevealed(true);
+      setVerdictState("saved");
+    } catch (verdictError) {
+      setVerdictState("error");
+      setDebateError(verdictError.message);
     }
   }
 
@@ -276,21 +329,37 @@ function App() {
 
       {debate ? (
         <>
-          <section className="mx-auto max-w-6xl px-8 pb-8">
-            <JudgeScoreboard judge={debate.judge} />
-          </section>
+          {judgeRevealed ? (
+            <section className="mx-auto max-w-6xl px-8 pb-8">
+              <JudgeScoreboard judge={debate.judge} verdictResult={verdictResult} />
+            </section>
+          ) : (
+            <section className="mx-auto max-w-6xl px-8 pb-8">
+              <VerdictPanel
+                side={verdictSide}
+                setSide={setVerdictSide}
+                confidence={confidence}
+                setConfidence={setConfidence}
+                note={note}
+                setNote={setNote}
+                state={verdictState}
+                onSubmit={handleSubmitVerdict}
+                onSkip={() => setJudgeRevealed(true)}
+              />
+            </section>
+          )}
           <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-10">
             <OpeningColumn
               title="多頭開場"
               tone="bull"
               claims={debate.bull.claims}
-              scoreMap={buildScoreMap(debate.judge)}
+              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
             />
             <OpeningColumn
               title="空頭開場"
               tone="bear"
               claims={debate.bear.claims}
-              scoreMap={buildScoreMap(debate.judge)}
+              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
             />
           </section>
           <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
@@ -298,13 +367,13 @@ function App() {
               title="多頭反駁"
               tone="bull"
               rebuttals={debate.bull_rebuttals.rebuttals}
-              scoreMap={buildScoreMap(debate.judge)}
+              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
             />
             <RebuttalColumn
               title="空頭反駁"
               tone="bear"
               rebuttals={debate.bear_rebuttals.rebuttals}
-              scoreMap={buildScoreMap(debate.judge)}
+              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
             />
           </section>
         </>
@@ -320,7 +389,89 @@ function buildScoreMap(judge) {
   }, {});
 }
 
-function JudgeScoreboard({ judge }) {
+function VerdictPanel({
+  side,
+  setSide,
+  confidence,
+  setConfidence,
+  note,
+  setNote,
+  state,
+  onSubmit,
+  onSkip,
+}) {
+  return (
+    <form className="rounded-lg border border-amber-300/40 bg-zinc-900 p-6" onSubmit={onSubmit}>
+      <div className="flex items-start justify-between gap-8">
+        <div>
+          <p className="text-sm uppercase text-amber-200">Blind verdict</p>
+          <h2 className="mt-2 text-2xl font-semibold">先站邊，再揭曉裁判評分</h2>
+        </div>
+        <button
+          type="button"
+          onClick={onSkip}
+          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+        >
+          跳過站邊，直接看評分
+        </button>
+      </div>
+
+      <div className="mt-6 flex gap-3">
+        {[
+          ["bull", "看多"],
+          ["bear", "看空"],
+          ["neutral", "中立觀望"],
+        ].map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setSide(value)}
+            className={`rounded px-4 py-2 font-semibold transition ${
+              side === value
+                ? "bg-amber-300 text-zinc-950"
+                : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="confidence">
+        信心度 {confidence}
+      </label>
+      <input
+        id="confidence"
+        type="range"
+        min="1"
+        max="5"
+        value={confidence}
+        onChange={(event) => setConfidence(Number(event.target.value))}
+        className="mt-3 w-full accent-amber-300"
+      />
+
+      <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="verdict-note">
+        一句話理由
+      </label>
+      <textarea
+        id="verdict-note"
+        value={note}
+        onChange={(event) => setNote(event.target.value)}
+        className="mt-3 h-24 w-full resize-none rounded border border-zinc-700 bg-zinc-950 p-3 text-zinc-100 outline-none transition focus:border-amber-300"
+      />
+
+      <button
+        type="submit"
+        disabled={state === "saving"}
+        className="mt-6 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+      >
+        {state === "saving" ? "儲存中" : "送出站邊"}
+      </button>
+    </form>
+  );
+}
+
+function JudgeScoreboard({ judge, verdictResult }) {
   const maxTotal = Math.max(judge.bull_total, judge.bear_total, 1);
   const bullWidth = `${(judge.bull_total / maxTotal) * 100}%`;
   const bearWidth = `${(judge.bear_total / maxTotal) * 100}%`;
@@ -346,6 +497,20 @@ function JudgeScoreboard({ judge }) {
         </div>
       </div>
       <p className="mt-5 text-sm leading-6 text-zinc-300">{judge.summary}</p>
+      {verdictResult ? (
+        <p className="mt-4 rounded border border-amber-300/40 bg-amber-950/20 p-3 text-sm text-amber-100">
+          {verdictResult.judge_agreement ? "你與裁判同邊" : "你與裁判不同邊"}，裁判傾向：
+          {verdictResult.judge_side === "bull"
+            ? "看多"
+            : verdictResult.judge_side === "bear"
+              ? "看空"
+              : "中立"}
+        </p>
+      ) : (
+        <p className="mt-4 rounded border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-300">
+          已跳過站邊，本場不計入戰績
+        </p>
+      )}
     </div>
   );
 }

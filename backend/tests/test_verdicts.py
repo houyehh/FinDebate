@@ -1,0 +1,159 @@
+import sqlite3
+from pathlib import Path
+from uuid import uuid4
+
+from fastapi.testclient import TestClient
+
+from app import database
+from app.debate import (
+    DebateClaim,
+    JudgeItemScore,
+    JudgeResult,
+    JudgedDebate,
+    OpeningRound,
+    Rebuttal,
+    RebuttalRound,
+)
+from app.main import app
+
+
+def _judged_debate() -> JudgedDebate:
+    bull = OpeningRound(
+        side="bull",
+        claims=[
+            DebateClaim(
+                claim_id=f"BULL-{index}",
+                claim=f"Bull claim {index}",
+                evidence=f"Bull evidence {index}",
+                source_url="https://example.com/bull",
+                source_name="Bull Source",
+            )
+            for index in range(1, 4)
+        ],
+    )
+    bear = OpeningRound(
+        side="bear",
+        claims=[
+            DebateClaim(
+                claim_id=f"BEAR-{index}",
+                claim=f"Bear claim {index}",
+                evidence=f"Bear evidence {index}",
+                source_url="https://example.com/bear",
+                source_name="Bear Source",
+            )
+            for index in range(1, 4)
+        ],
+    )
+    bull_rebuttals = RebuttalRound(
+        side="bull",
+        rebuttals=[
+            Rebuttal(
+                target_claim_id="BEAR-1",
+                rebuttal="Bull rebuttal 1",
+                evidence="Bull rebuttal evidence 1",
+                source_url="https://example.com/bull/rebuttal-1",
+            ),
+            Rebuttal(
+                target_claim_id="BEAR-2",
+                rebuttal="Bull rebuttal 2",
+                evidence="Bull rebuttal evidence 2",
+                source_url="https://example.com/bull/rebuttal-2",
+            ),
+        ],
+    )
+    bear_rebuttals = RebuttalRound(
+        side="bear",
+        rebuttals=[
+            Rebuttal(
+                target_claim_id="BULL-1",
+                rebuttal="Bear rebuttal 1",
+                evidence="Bear rebuttal evidence 1",
+                source_url="https://example.com/bear/rebuttal-1",
+            ),
+            Rebuttal(
+                target_claim_id="BULL-2",
+                rebuttal="Bear rebuttal 2",
+                evidence="Bear rebuttal evidence 2",
+                source_url="https://example.com/bear/rebuttal-2",
+            ),
+        ],
+    )
+    scores = [
+        JudgeItemScore(
+            item_id=item_id,
+            side=side,
+            item_type=item_type,
+            evidence_score=5,
+            source_score=5,
+            logic_score=5,
+            flag="none",
+            flag_reason="",
+        )
+        for item_id, side, item_type in [
+            ("BULL-1", "bull", "claim"),
+            ("BULL-2", "bull", "claim"),
+            ("BULL-3", "bull", "claim"),
+            ("BEAR-1", "bear", "claim"),
+            ("BEAR-2", "bear", "claim"),
+            ("BEAR-3", "bear", "claim"),
+            ("BULL-REB-1", "bull", "rebuttal"),
+            ("BULL-REB-2", "bull", "rebuttal"),
+            ("BEAR-REB-1", "bear", "rebuttal"),
+            ("BEAR-REB-2", "bear", "rebuttal"),
+        ]
+    ]
+    judge = JudgeResult(
+        scores=scores,
+        bull_total=75,
+        bear_total=60,
+        summary="Bull has stronger evidence quality.",
+    )
+
+    return JudgedDebate(
+        ticker="NVDA",
+        language="zh-Hant",
+        generated_at="2026-07-18T00:00:00+00:00",
+        bull=bull,
+        bear=bear,
+        bull_rebuttals=bull_rebuttals,
+        bear_rebuttals=bear_rebuttals,
+        price_at_debate=123.45,
+        currency="USD",
+        judge=judge,
+    )
+
+
+def test_submit_verdict_persists_debate_and_verdict(monkeypatch) -> None:
+    database_file = Path("data") / f"test_{uuid4().hex}.db"
+    monkeypatch.setenv("DATABASE_PATH", str(database_file))
+    monkeypatch.setattr(database, "_current_price_or_debate_price", lambda _debate: 124.0)
+    client = TestClient(app)
+
+    response = client.post(
+        "/api/verdicts",
+        json={
+            "debate": _judged_debate().model_dump(mode="json"),
+            "side": "bull",
+            "confidence": 4,
+            "note": "Evidence quality looked stronger.",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["judge_side"] == "bull"
+    assert body["judge_agreement"] is True
+    assert body["price_at_verdict"] == 124.0
+
+    with sqlite3.connect(database_file) as connection:
+        debate_row = connection.execute(
+            "SELECT ticker, bull_json, judge_json FROM debates"
+        ).fetchone()
+        verdict_row = connection.execute(
+            "SELECT side, confidence, note, judge_agreement FROM verdicts"
+        ).fetchone()
+
+    assert debate_row[0] == "NVDA"
+    assert "Bull claim 1" in debate_row[1]
+    assert "Bull has stronger evidence quality" in debate_row[2]
+    assert verdict_row == ("bull", 4, "Evidence quality looked stronger.", 1)
