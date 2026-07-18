@@ -204,7 +204,8 @@
 
 ### 遇到的問題
 - demo seed 會建立本機 `data/app.db`，此檔案已被 `.gitignore` 排除，不會提交。
-- GitHub remote URL 仍未提供，因此本任務完成後的 push 預期仍會失敗；本地 commit 會保留。
+- 已建立本地 commit `68c9c5f feat: add scoreboard backtesting`。
+- `git push` 失敗，原因是目前尚未提供 GitHub remote URL，也沒有設定 push destination；已保留本地 commit。
 
 ### 下一步
 - 任務 8：實作 F6 中英切換，UI 文案切換並將語言偏好存入 localStorage。
