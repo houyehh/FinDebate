@@ -127,6 +127,8 @@ function App() {
   const [openAISettings, setOpenAISettings] = useState(null);
   const [settingsApiKey, setSettingsApiKey] = useState("");
   const [settingsModel, setSettingsModel] = useState("");
+  const [settingsKeySource, setSettingsKeySource] = useState("default");
+  const [settingsDebateMode, setSettingsDebateMode] = useState("api");
   const [settingsError, setSettingsError] = useState("");
   const [settingsSaved, setSettingsSaved] = useState(false);
   const t = dictionaries[language] || dictionaries["zh-Hant"];
@@ -235,6 +237,8 @@ function App() {
 
       setOpenAISettings(data);
       setSettingsModel(data.model || "");
+      setSettingsKeySource(data.key_source || "default");
+      setSettingsDebateMode(data.debate_mode || "api");
       setSettingsApiKey("");
       setSettingsState("ready");
     } catch (settingsLookupError) {
@@ -330,6 +334,8 @@ function App() {
         body: JSON.stringify({
           api_key: settingsApiKey,
           model: settingsModel,
+          key_source: settingsKeySource,
+          debate_mode: settingsDebateMode,
         }),
       });
       const data = await readApiResponse(response, t.settingsSaveFailed);
@@ -340,6 +346,8 @@ function App() {
 
       setOpenAISettings(data);
       setSettingsModel(data.model || "");
+      setSettingsKeySource(data.key_source || "default");
+      setSettingsDebateMode(data.debate_mode || "api");
       setSettingsApiKey("");
       setSettingsSaved(true);
       setSettingsState("ready");
@@ -597,6 +605,10 @@ function App() {
           setApiKey={setSettingsApiKey}
           model={settingsModel}
           setModel={setSettingsModel}
+          keySource={settingsKeySource}
+          setKeySource={setSettingsKeySource}
+          debateMode={settingsDebateMode}
+          setDebateMode={setSettingsDebateMode}
           error={settingsError}
           saved={settingsSaved}
           onSubmit={handleSubmitOpenAISettings}
@@ -845,6 +857,10 @@ function OpenAISettingsPage({
   setApiKey,
   model,
   setModel,
+  keySource,
+  setKeySource,
+  debateMode,
+  setDebateMode,
   error,
   saved,
   onSubmit,
@@ -864,6 +880,8 @@ function OpenAISettingsPage({
   const keyStatus = settings?.api_key_configured ? t.openaiSettingsConfigured : t.openaiSettingsMissing;
   const keyPreview = settings?.api_key_preview ? ` (${settings.api_key_preview})` : "";
   const modelOptions = settings?.available_models || [];
+  const defaultKeyStatus = settings?.default_key_configured ? t.openaiSettingsConfigured : t.openaiSettingsMissing;
+  const userKeyStatus = settings?.user_key_configured ? t.openaiSettingsConfigured : t.openaiSettingsMissing;
 
   return (
     <section className="mx-auto max-w-4xl px-8 py-12">
@@ -882,11 +900,68 @@ function OpenAISettingsPage({
       </div>
 
       <form className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-7" onSubmit={onSubmit}>
-        <div className="rounded border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300">
+        <div>
+          <p className="text-sm font-medium text-zinc-300">{t.debateModeLabel}</p>
+          <div className="mt-3 flex gap-3">
+            {[
+              ["api", t.apiMode],
+              ["demo", t.demoMode],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setDebateMode(value)}
+                className={`rounded px-4 py-2 font-semibold transition ${
+                  debateMode === value
+                    ? "bg-amber-300 text-zinc-950"
+                    : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-6 rounded border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300">
           <span className="text-zinc-400">{t.openaiSettingsStatus}: </span>
           <span className={settings?.api_key_configured ? "text-emerald-300" : "text-amber-200"}>
             {keyStatus}{keyPreview}
           </span>
+        </div>
+
+        <div className="mt-6">
+          <p className="text-sm font-medium text-zinc-300">{t.keySourceLabel}</p>
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => setKeySource("default")}
+              className={`rounded border px-4 py-3 text-left transition ${
+                keySource === "default"
+                  ? "border-amber-300 bg-amber-950/30 text-amber-100"
+                  : "border-zinc-700 text-zinc-300 hover:border-amber-300"
+              }`}
+            >
+              <span className="block font-semibold">{t.defaultApiKey}</span>
+              <span className="mt-1 block text-sm text-zinc-400">
+                {t.openaiSettingsStatus}: {defaultKeyStatus}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setKeySource("user")}
+              className={`rounded border px-4 py-3 text-left transition ${
+                keySource === "user"
+                  ? "border-amber-300 bg-amber-950/30 text-amber-100"
+                  : "border-zinc-700 text-zinc-300 hover:border-amber-300"
+              }`}
+            >
+              <span className="block font-semibold">{t.userApiKey}</span>
+              <span className="mt-1 block text-sm text-zinc-400">
+                {t.openaiSettingsStatus}: {userKeyStatus}
+              </span>
+            </button>
+          </div>
         </div>
 
         <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="openai-api-key">

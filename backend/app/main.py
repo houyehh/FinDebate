@@ -69,13 +69,21 @@ class VerdictSubmitRequest(BaseModel):
 class OpenAISettingsRequest(BaseModel):
     api_key: str = ""
     model: str = Field(min_length=1)
+    key_source: str = "default"
+    debate_mode: str = "api"
 
 
 class OpenAISettingsResponse(BaseModel):
     api_key_configured: bool
     api_key_preview: str
+    default_key_configured: bool
+    user_key_configured: bool
+    key_source: str
+    debate_mode: str
     model: str
     available_models: list[str]
+    key_sources: list[str]
+    debate_modes: list[str]
 
 
 @app.get("/api/settings/openai", response_model=OpenAISettingsResponse)
@@ -86,7 +94,12 @@ def read_openai_settings() -> dict:
 @app.post("/api/settings/openai", response_model=OpenAISettingsResponse)
 def update_openai_settings(request: OpenAISettingsRequest) -> dict:
     try:
-        return settings.update_openai_settings(api_key=request.api_key, model=request.model)
+        return settings.update_openai_settings(
+            api_key=request.api_key,
+            model=request.model,
+            key_source=request.key_source,
+            debate_mode=request.debate_mode,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
 

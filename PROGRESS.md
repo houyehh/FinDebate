@@ -430,3 +430,29 @@
 
 ### 下一步
 - 使用 `http://127.0.0.1:5174` 測試畫面；若 quota 未處理，預期會顯示 quota/billing 訊息。
+
+## 2026-07-20 預設 API key 選項與 Demo 辯論模式
+
+### 做了什麼
+- 設定頁新增「辯論模式」：`OpenAI API` 與 `Demo 模式`。
+- 設定頁新增「API key 來源」：`使用預設 API key` 與 `使用自己的 API key`。
+- 後端新增 `OPENAI_KEY_SOURCE`、`OPENAI_DEBATE_MODE`、`OPENAI_USER_API_KEY` 設定，讓開發者可保留預設 key，也讓使用者可貼自己的 key。
+- 辯論服務新增 Demo 模式：產生固定的兩輪多空辯論與裁判評分，不呼叫 OpenAI，因此 API quota 用完時仍可完整測試與錄影。
+- 更新 `.env.example` 與 README，說明預設 key、使用者 key、API 模式、Demo 模式與錄影流程。
+
+### 關鍵決定
+- 使用者在前端貼上的 key 寫入 `OPENAI_USER_API_KEY`，不覆蓋開發者預設的 `OPENAI_API_KEY`。
+- 儲存設定時不把作業系統環境變數裡的 secret 複寫到 `.env`，避免不必要的 secret 落地。
+- Demo 模式仍保留 yfinance 的 ticker 價格快照，但不產生任何 OpenAI API 呼叫，適合比賽影片展示完整 UX。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：21 passed。
+- `npm.cmd test`：8 passed。
+- `npm.cmd run build`：通過。
+
+### 遇到的問題
+- 前端設定頁新增多個「尚未設定」文字後，原測試用單一文字查詢會撞到多個元素；已改成符合新 UI 的斷言。
+- 測試發現設定寫入流程可能把 OS env 的預設 key 寫進 `.env`；已改成只保留 `.env` 原本的預設 key。
+
+### 下一步
+- 若要拍比賽 demo，建議先切到 `Demo 模式` 完成辯論、盲判與裁判揭曉畫面，再執行 `scripts/demo_seed.py --demo-seed` 展示戰績頁。

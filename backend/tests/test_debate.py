@@ -257,6 +257,26 @@ def test_openai_insufficient_quota_maps_to_provider_error() -> None:
     assert "quota exceeded" in str(provider_error)
 
 
+def test_demo_mode_returns_judged_debate_without_openai(monkeypatch) -> None:
+    monkeypatch.setattr(debate, "get_ticker_snapshot", lambda _ticker: _snapshot())
+    monkeypatch.setattr(debate, "get_debate_mode", lambda: "demo")
+
+    def fail_openai_call(*_args, **_kwargs):
+        raise AssertionError("Demo mode must not call OpenAI")
+
+    monkeypatch.setattr(debate, "_create_openai_response", fail_openai_call)
+
+    result = debate.generate_judged_debate("NVDA", "zh-Hant")
+
+    assert result.ticker == "NVDA"
+    assert len(result.bull.claims) == 3
+    assert len(result.bear.claims) == 3
+    assert len(result.bull_rebuttals.rebuttals) == 2
+    assert len(result.bear_rebuttals.rebuttals) == 2
+    assert len(result.judge.scores) == 10
+    assert any(score.flag == "unverifiable" for score in result.judge.scores)
+
+
 def test_judge_flags_unverifiable_fixture(monkeypatch) -> None:
     bull_round = debate.OpeningRound(
         side="bull",

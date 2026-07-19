@@ -8,7 +8,7 @@ from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.market_data import TickerSnapshot, get_ticker_snapshot
-from app.settings import get_openai_api_key, get_openai_model
+from app.settings import get_debate_mode, get_openai_api_key, get_openai_model
 
 Side = Literal["bull", "bear"]
 
@@ -125,6 +125,9 @@ OPENING_ROUND_SCHEMA: dict[str, Any] = {
 
 def generate_round_one_debate(ticker: str, language: str = "zh-Hant") -> RoundOneDebate:
     snapshot = get_ticker_snapshot(ticker)
+    if get_debate_mode() == "demo":
+        return _demo_round_one_response(snapshot, language)
+
     bull = generate_opening_for_side("bull", snapshot, language)
     bear = generate_opening_for_side("bear", snapshot, language)
 
@@ -133,6 +136,9 @@ def generate_round_one_debate(ticker: str, language: str = "zh-Hant") -> RoundOn
 
 def generate_two_round_debate(ticker: str, language: str = "zh-Hant") -> TwoRoundDebate:
     snapshot = get_ticker_snapshot(ticker)
+    if get_debate_mode() == "demo":
+        return _demo_two_round_response(snapshot, language)
+
     bull = generate_opening_for_side("bull", snapshot, language)
     bear = generate_opening_for_side("bear", snapshot, language)
     bull_rebuttals = generate_rebuttals_for_side("bull", snapshot, own_round=bull, opponent_round=bear, language=language)
@@ -147,6 +153,14 @@ def generate_two_round_debate(ticker: str, language: str = "zh-Hant") -> TwoRoun
 
 
 def generate_judged_debate(ticker: str, language: str = "zh-Hant") -> JudgedDebate:
+    if get_debate_mode() == "demo":
+        snapshot = get_ticker_snapshot(ticker)
+        two_round = _demo_two_round_response(snapshot, language)
+        return JudgedDebate(
+            **two_round.model_dump(),
+            judge=_demo_judge_result(language),
+        )
+
     two_round = generate_two_round_debate(ticker, language)
     judge = generate_judge_for_debate(two_round, language)
 
@@ -170,6 +184,198 @@ def _build_round_one_response(
         bear=bear,
         price_at_debate=snapshot.price,
         currency=snapshot.currency,
+    )
+
+
+def _demo_round_one_response(snapshot: TickerSnapshot, language: str) -> RoundOneDebate:
+    return _build_round_one_response(
+        snapshot=snapshot,
+        language=language,
+        bull=_demo_opening_round("bull", snapshot, language),
+        bear=_demo_opening_round("bear", snapshot, language),
+    )
+
+
+def _demo_two_round_response(snapshot: TickerSnapshot, language: str) -> TwoRoundDebate:
+    first_round = _demo_round_one_response(snapshot, language)
+    return TwoRoundDebate(
+        **first_round.model_dump(),
+        bull_rebuttals=_demo_rebuttal_round("bull", language),
+        bear_rebuttals=_demo_rebuttal_round("bear", language),
+    )
+
+
+def _demo_opening_round(side: Side, snapshot: TickerSnapshot, language: str) -> OpeningRound:
+    zh = language.startswith("zh")
+    ticker = snapshot.ticker
+    price_text = f"{snapshot.price:.2f} {snapshot.currency}"
+    if side == "bull":
+        claims = [
+            DebateClaim(
+                claim_id="BULL-1",
+                claim=(
+                    f"{ticker} 仍具備基本面支撐"
+                    if zh
+                    else f"{ticker} still has fundamental support"
+                ),
+                evidence=(
+                    f"Demo 模式引用目前價格快照 {price_text}，並假設營收與需求仍維持韌性。"
+                    if zh
+                    else f"Demo mode cites the current price snapshot of {price_text} and assumes resilient revenue and demand."
+                ),
+                source_url=f"https://finance.yahoo.com/quote/{ticker}/",
+                source_name="Yahoo Finance",
+            ),
+            DebateClaim(
+                claim_id="BULL-2",
+                claim="市場預期改善可推動重新評價" if zh else "Improving expectations could drive rerating",
+                evidence=(
+                    "Demo 論點假設投資人重新關注成長性與利潤率，而非只看短期波動。"
+                    if zh
+                    else "The demo thesis assumes investors refocus on growth and margins rather than near-term volatility alone."
+                ),
+                source_url="https://www.sec.gov/edgar/search/",
+                source_name="SEC EDGAR",
+            ),
+            DebateClaim(
+                claim_id="BULL-3",
+                claim="價格回測仍需以後續資料驗證" if zh else "The thesis still needs follow-up price validation",
+                evidence=(
+                    "本產品會記錄站邊時價格，並以 1/7/30 日後真實價格回測判斷品質。"
+                    if zh
+                    else "The product records the entry price and validates the judgment with 1/7/30 day price checks."
+                ),
+                source_url="https://finance.yahoo.com/",
+                source_name="Yahoo Finance",
+            ),
+        ]
+    else:
+        claims = [
+            DebateClaim(
+                claim_id="BEAR-1",
+                claim=f"{ticker} 可能已反映過高預期" if zh else f"{ticker} may already price in high expectations",
+                evidence=(
+                    f"Demo 模式指出目前價格 {price_text} 可能已包含樂觀情境，安全邊際需重新檢查。"
+                    if zh
+                    else f"Demo mode notes that the current price of {price_text} may already include optimistic assumptions."
+                ),
+                source_url=f"https://finance.yahoo.com/quote/{ticker}/",
+                source_name="Yahoo Finance",
+            ),
+            DebateClaim(
+                claim_id="BEAR-2",
+                claim="估值壓力可能放大回撤" if zh else "Valuation pressure could amplify drawdowns",
+                evidence=(
+                    "Demo 論點假設若成長預期下修，高估值資產通常會面臨較大波動。"
+                    if zh
+                    else "The demo thesis assumes high-valuation assets can see larger volatility when growth expectations fall."
+                ),
+                source_url="https://www.sec.gov/edgar/search/",
+                source_name="SEC EDGAR",
+            ),
+            DebateClaim(
+                claim_id="BEAR-3",
+                claim="資料來源品質仍需裁判檢查" if zh else "Source quality still requires judge review",
+                evidence=(
+                    "Demo 模式保留一條較弱論點，讓裁判區能展示 evidence/source/logic 評分與旗標。"
+                    if zh
+                    else "Demo mode keeps one weaker claim so the judge panel can show evidence/source/logic scores and flags."
+                ),
+                source_url="https://example.com/demo-unverified-source",
+                source_name="Demo weak source",
+            ),
+        ]
+    return OpeningRound(side=side, claims=claims)
+
+
+def _demo_rebuttal_round(side: Side, language: str) -> RebuttalRound:
+    zh = language.startswith("zh")
+    if side == "bull":
+        return RebuttalRound(
+            side="bull",
+            rebuttals=[
+                Rebuttal(
+                    target_claim_id="BEAR-1",
+                    rebuttal="多頭認為高預期需和成長速度一起判斷" if zh else "Bull argues expectations must be judged against growth speed",
+                    evidence=(
+                        "若基本面成長同步上修，高預期不必然等於高風險。"
+                        if zh
+                        else "If fundamentals are revised upward at the same time, high expectations do not automatically imply high risk."
+                    ),
+                    source_url="https://finance.yahoo.com/",
+                ),
+                Rebuttal(
+                    target_claim_id="BEAR-2",
+                    rebuttal="多頭認為估值壓力可被獲利改善抵消" if zh else "Bull argues margin gains can offset valuation pressure",
+                    evidence=(
+                        "Demo 反駁假設獲利率改善可支撐估值，需等待後續回測驗證。"
+                        if zh
+                        else "The demo rebuttal assumes margin improvement can support valuation, pending later backtesting."
+                    ),
+                    source_url="https://www.sec.gov/edgar/search/",
+                ),
+            ],
+        )
+
+    return RebuttalRound(
+        side="bear",
+        rebuttals=[
+            Rebuttal(
+                target_claim_id="BULL-1",
+                rebuttal="空頭認為價格快照不足以證明基本面" if zh else "Bear argues a price snapshot does not prove fundamentals",
+                evidence=(
+                    "單一價格只能代表交易結果，仍需搭配財報與展望資料判斷。"
+                    if zh
+                    else "A price alone only reflects trading outcomes; financial statements and guidance are still needed."
+                ),
+                source_url="https://www.sec.gov/edgar/search/",
+            ),
+            Rebuttal(
+                target_claim_id="BULL-2",
+                rebuttal="空頭認為重新評價需要明確催化劑" if zh else "Bear argues rerating needs a clear catalyst",
+                evidence=(
+                    "若沒有新財報、產品或政策催化，市場預期改善可能只是敘事。"
+                    if zh
+                    else "Without new earnings, product, or policy catalysts, improving expectations may remain narrative-driven."
+                ),
+                source_url="https://finance.yahoo.com/",
+            ),
+        ],
+    )
+
+
+def _demo_judge_result(language: str) -> JudgeResult:
+    zh = language.startswith("zh")
+    scores = [
+        JudgeItemScore(item_id="BULL-1", side="bull", item_type="claim", evidence_score=4, source_score=4, logic_score=4),
+        JudgeItemScore(item_id="BULL-2", side="bull", item_type="claim", evidence_score=3, source_score=3, logic_score=4),
+        JudgeItemScore(item_id="BULL-3", side="bull", item_type="claim", evidence_score=4, source_score=4, logic_score=5),
+        JudgeItemScore(item_id="BEAR-1", side="bear", item_type="claim", evidence_score=4, source_score=4, logic_score=4),
+        JudgeItemScore(item_id="BEAR-2", side="bear", item_type="claim", evidence_score=3, source_score=3, logic_score=4),
+        JudgeItemScore(
+            item_id="BEAR-3",
+            side="bear",
+            item_type="claim",
+            evidence_score=2,
+            source_score=1,
+            logic_score=2,
+            flag="unverifiable",
+            flag_reason="Demo weak source is intentionally not a reliable source." if not zh else "Demo 弱來源刻意不是可靠來源。",
+        ),
+        JudgeItemScore(item_id="BULL-REB-1", side="bull", item_type="rebuttal", evidence_score=3, source_score=3, logic_score=4),
+        JudgeItemScore(item_id="BULL-REB-2", side="bull", item_type="rebuttal", evidence_score=3, source_score=3, logic_score=4),
+        JudgeItemScore(item_id="BEAR-REB-1", side="bear", item_type="rebuttal", evidence_score=4, source_score=4, logic_score=4),
+        JudgeItemScore(item_id="BEAR-REB-2", side="bear", item_type="rebuttal", evidence_score=3, source_score=3, logic_score=4),
+    ]
+    return JudgeResult(
+        scores=scores,
+        bull_total=_score_total(scores, "bull"),
+        bear_total=_score_total(scores, "bear"),
+        summary=(
+            "Demo 裁判總評：此模式用固定範例資料展示來源查核、評分、盲判與回測流程，不代表真實投資結論。"
+            if zh
+            else "Demo judge summary: fixed sample data demonstrates source checks, scoring, blind judgment, and backtesting; it is not an investment conclusion."
+        ),
     )
 
 
