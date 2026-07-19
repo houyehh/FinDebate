@@ -376,6 +376,32 @@
 ### 下一步
 - 重啟後端與前端後再次測試辯論流程，確認畫面顯示的是實際 OpenAI provider 錯誤，而不是 JSON parse 錯誤。
 
+## 2026-07-19 BYOK OpenAI 設定頁
+
+### 做了什麼
+- 新增 BYOK（Bring Your Own Key）流程，讓使用者可在前端「設定」頁輸入自己的 OpenAI API key 與模型名稱。
+- 新增 `GET /api/settings/openai`，回傳 key 是否已設定、masked key preview、目前模型與建議模型清單。
+- 新增 `POST /api/settings/openai`，接收新 key/model，寫入 repo root `.env`。
+- 前端新增「設定」導覽與設定頁；key 欄位留空時保留既有 key，送出後清空輸入欄位。
+- 辯論生成改成每次讀取目前 `OPENAI_MODEL`，不再使用 import time 固定常數，因此設定頁改 model 後下一次辯論即可生效。
+- README 補上前端設定頁與 settings API 說明。
+
+### 關鍵決定
+- 不把 API key 存在前端 localStorage，也不回傳完整 key；前端只顯示 masked preview。
+- 本機版採用後端寫 `.env` 的方式，符合 secret 不進 Git、不進戰績資料庫的原則。
+- 模型欄位提供建議清單，但允許自訂 model id，避免不同使用者帳號可用模型不同而被卡住。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，19 passed。
+- `npm.cmd test`：通過，7 passed。
+- `npm.cmd run build`：通過。
+
+### 遇到的問題
+- 這能避免未來所有使用者都吃同一把 key 的 credits，但無法替使用者解決其 OpenAI Platform billing/quota 問題；沒有 API credits 時仍會回 `insufficient_quota`。
+
+### 下一步
+- 重啟前後端後，從「設定」頁輸入使用者自己的 key/model，再測試辯論流程。
+
 ## 2026-07-19 辯論生成失敗原因追查
 
 ### 做了什麼

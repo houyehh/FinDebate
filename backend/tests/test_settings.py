@@ -1,4 +1,24 @@
+from fastapi.testclient import TestClient
+
 from app import settings
+from app.main import app
+
+
+def test_read_openai_settings_masks_api_key(monkeypatch) -> None:
+    monkeypatch.setattr(
+        settings,
+        "DOTENV_VALUES",
+        {"OPENAI_API_KEY": "sk-proj-1234567890", "OPENAI_MODEL": "gpt-test"},
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_MODEL", raising=False)
+
+    status = settings.read_openai_settings()
+
+    assert status["api_key_configured"] is True
+    assert status["api_key_preview"] == "sk-proj...7890"
+    assert status["model"] == "gpt-test"
+    assert status["available_models"]
 
 
 def test_env_path_points_to_project_root() -> None:
@@ -18,3 +38,44 @@ def test_read_env_strips_bom_from_dotenv_value(monkeypatch) -> None:
     monkeypatch.setattr(settings, "DOTENV_VALUES", {"OPENAI_MODEL": "\ufeffgpt-test-model "})
 
     assert settings._read_env("OPENAI_MODEL") == "gpt-test-model"
+
+
+def test_update_openai_settings_writes_env_without_bom(monkeypatch) -> None:
+    env_path = settings.ROOT_DIR / "data" / "test_openai_settings.db"
+    env_path.parent.mkdir(exist_ok=True)
+    env_path.write_text("OPENAI_API_KEY=old\nOPENAI_MODEL=old-model\nDATABASE_PATH=data/test.db\n", encoding="utf-8")
+    monkeypatch.setattr(settings, "ENV_PATH", env_path)
+    monkeypatch.setattr(
+        settings,
+        "DOTENV_VALUES",
+        {"OPENAI_API_KEY": "old", "OPENAI_MODEL": "old-model", "DATABASE_PATH": "data/test.db"},
+    )
+
+    status = settings.update_openai_settings(api_key="sk-new-secret", model="gpt-5.6-sol")
+
+    raw = env_path.read_bytes()
+    assert raw[:3] != b"\xef\xbb\xbf"
+    assert "OPENAI_API_KEY=sk-new-secret" in env_path.read_text(encoding="utf-8")
+    assert status["api_key_preview"] == "sk-new-...cret"
+    assert status["model"] == "gpt-5.6-sol"
+
+
+def test_openai_settings_endpoint_returns_masked_key(monkeypatch) -> None:
+    monkeypatch.setattr(
+        settings,
+        "read_openai_settings",
+        lambda: {
+            "api_key_configured": True,
+            "api_key_preview": "sk-proj...abcd",
+            "model": "gpt-5.6-luna",
+            "available_models": ["gpt-5.6-luna"],
+        },
+    )
+    client = TestClient(app)
+
+    response = client.get("/api/settings/openai")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["api_key_preview"] == "sk-proj...abcd"
+    assert "OPENAI_API_KEY" not in body

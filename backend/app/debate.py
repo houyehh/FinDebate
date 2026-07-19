@@ -8,7 +8,7 @@ from openai import OpenAI, OpenAIError
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from app.market_data import TickerSnapshot, get_ticker_snapshot
-from app.settings import OPENAI_MODEL, get_openai_api_key
+from app.settings import get_openai_api_key, get_openai_model
 
 Side = Literal["bull", "bear"]
 
@@ -244,7 +244,7 @@ def generate_judge_for_debate(debate: TwoRoundDebate, language: str) -> JudgeRes
 
 def _call_openai_opening(side: Side, snapshot: TickerSnapshot, language: str) -> dict[str, Any]:
     response = _create_openai_response(
-        model=OPENAI_MODEL,
+        model=get_openai_model(),
         input=[
             {"role": "system", "content": _system_prompt(side, language)},
             {"role": "user", "content": _user_prompt(snapshot)},
@@ -270,7 +270,7 @@ def _call_openai_rebuttals(
     language: str,
 ) -> dict[str, Any]:
     response = _create_openai_response(
-        model=OPENAI_MODEL,
+        model=get_openai_model(),
         input=[
             {"role": "system", "content": _rebuttal_system_prompt(side, language)},
             {
@@ -295,7 +295,7 @@ def _call_openai_rebuttals(
 def _call_openai_judge(debate: TwoRoundDebate, language: str) -> dict[str, Any]:
     items = _judge_items(debate)
     response = _create_openai_response(
-        model=OPENAI_MODEL,
+        model=get_openai_model(),
         input=[
             {"role": "system", "content": _judge_system_prompt(language)},
             {"role": "user", "content": _judge_user_prompt(debate, items)},
@@ -339,7 +339,7 @@ def _provider_error_from_openai(exc: OpenAIError) -> DebateProviderError:
         return DebateProviderError("OpenAI API authentication failed. Check OPENAI_API_KEY.", status_code=401)
     if status_code == 404:
         return DebateProviderError(
-            f"OpenAI model '{OPENAI_MODEL}' is not available for this API key.",
+            f"OpenAI model '{get_openai_model()}' is not available for this API key.",
             status_code=404,
         )
     if status_code == 429:

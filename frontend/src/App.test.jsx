@@ -7,7 +7,7 @@ import App from "./App";
 describe("App", () => {
   beforeEach(() => {
     localStorage.clear();
-    global.fetch = vi.fn((url) => {
+    global.fetch = vi.fn((url, options = {}) => {
       if (url === "/api/health") {
         return Promise.resolve({
           ok: true,
@@ -29,6 +29,32 @@ describe("App", () => {
                 { date: "2026-06-02", close: 121.5 },
                 { date: "2026-06-03", close: 123.45 },
               ],
+            }),
+        });
+      }
+
+      if (url === "/api/settings/openai" && options.method === "POST") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              api_key_configured: true,
+              api_key_preview: "sk-proj...abcd",
+              model: JSON.parse(options.body).model,
+              available_models: ["gpt-5.6-luna", "gpt-5.6-sol"],
+            }),
+        });
+      }
+
+      if (url === "/api/settings/openai") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              api_key_configured: false,
+              api_key_preview: "",
+              model: "gpt-5.6-luna",
+              available_models: ["gpt-5.6-luna", "gpt-5.6-sol"],
             }),
         });
       }
@@ -398,6 +424,32 @@ describe("App", () => {
     expect(screen.getByText("NVDA")).toBeInTheDocument();
     expect(screen.getByText("110.00 (+10.00%) 勝")).toBeInTheDocument();
     expect(screen.getByText("待結算")).toBeInTheDocument();
+  });
+
+  it("saves OpenAI API key and model from the settings page", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "設定" }));
+
+    expect(await screen.findByText("模型與 API Key")).toBeInTheDocument();
+    expect(screen.getByText(/尚未設定/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("OpenAI API key"), {
+      target: { value: "sk-proj-user-key" },
+    });
+    fireEvent.change(screen.getByLabelText("模型"), {
+      target: { value: "gpt-5.6-sol" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "儲存設定" }));
+
+    expect(await screen.findByText("設定已儲存，下一次辯論會使用新的 key/model。")).toBeInTheDocument();
+    const settingsCall = global.fetch.mock.calls.find(
+      ([url, options]) => url === "/api/settings/openai" && options?.method === "POST",
+    );
+    expect(JSON.parse(settingsCall[1].body)).toEqual({
+      api_key: "sk-proj-user-key",
+      model: "gpt-5.6-sol",
+    });
+    expect(screen.getByLabelText("OpenAI API key")).toHaveValue("");
   });
 
   it("switches UI language and sends the selected debate language", async () => {

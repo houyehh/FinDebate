@@ -123,6 +123,12 @@ function App() {
   const [recordsState, setRecordsState] = useState("idle");
   const [recordsData, setRecordsData] = useState(null);
   const [recordsError, setRecordsError] = useState("");
+  const [settingsState, setSettingsState] = useState("idle");
+  const [openAISettings, setOpenAISettings] = useState(null);
+  const [settingsApiKey, setSettingsApiKey] = useState("");
+  const [settingsModel, setSettingsModel] = useState("");
+  const [settingsError, setSettingsError] = useState("");
+  const [settingsSaved, setSettingsSaved] = useState(false);
   const t = dictionaries[language] || dictionaries["zh-Hant"];
 
   useEffect(() => {
@@ -154,6 +160,8 @@ function App() {
   useEffect(() => {
     if (activePage === "records") {
       fetchRecords();
+    } else if (activePage === "settings") {
+      fetchOpenAISettings();
     }
   }, [activePage]);
 
@@ -209,6 +217,29 @@ function App() {
     } catch (recordsLookupError) {
       setRecordsError(recordsLookupError.message);
       setRecordsState("error");
+    }
+  }
+
+  async function fetchOpenAISettings() {
+    setSettingsState("loading");
+    setSettingsError("");
+    setSettingsSaved(false);
+
+    try {
+      const response = await fetch(apiUrl("/api/settings/openai"));
+      const data = await readApiResponse(response, t.settingsFailed);
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.settingsFailed));
+      }
+
+      setOpenAISettings(data);
+      setSettingsModel(data.model || "");
+      setSettingsApiKey("");
+      setSettingsState("ready");
+    } catch (settingsLookupError) {
+      setSettingsError(settingsLookupError.message);
+      setSettingsState("error");
     }
   }
 
@@ -286,6 +317,38 @@ function App() {
     }
   }
 
+  async function handleSubmitOpenAISettings(event) {
+    event.preventDefault();
+    setSettingsState("saving");
+    setSettingsError("");
+    setSettingsSaved(false);
+
+    try {
+      const response = await fetch(apiUrl("/api/settings/openai"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: settingsApiKey,
+          model: settingsModel,
+        }),
+      });
+      const data = await readApiResponse(response, t.settingsSaveFailed);
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.settingsSaveFailed));
+      }
+
+      setOpenAISettings(data);
+      setSettingsModel(data.model || "");
+      setSettingsApiKey("");
+      setSettingsSaved(true);
+      setSettingsState("ready");
+    } catch (settingsSaveError) {
+      setSettingsError(settingsSaveError.message);
+      setSettingsState("error");
+    }
+  }
+
   function changeLanguage(nextLanguage) {
     setLanguage(nextLanguage);
     localStorage.setItem("language", nextLanguage);
@@ -319,6 +382,17 @@ function App() {
                 }`}
               >
                 {t.navRecords}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("settings")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "settings"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                {t.navSettings}
               </button>
             </div>
           </div>
@@ -507,12 +581,26 @@ function App() {
         </>
       ) : null}
         </>
-      ) : (
+      ) : activePage === "records" ? (
         <RecordsPage
           state={recordsState}
           data={recordsData}
           error={recordsError}
           onRefresh={fetchRecords}
+          t={t}
+        />
+      ) : (
+        <OpenAISettingsPage
+          state={settingsState}
+          settings={openAISettings}
+          apiKey={settingsApiKey}
+          setApiKey={setSettingsApiKey}
+          model={settingsModel}
+          setModel={setSettingsModel}
+          error={settingsError}
+          saved={settingsSaved}
+          onSubmit={handleSubmitOpenAISettings}
+          onRefresh={fetchOpenAISettings}
           t={t}
         />
       )}
@@ -747,6 +835,113 @@ function ScoreStrip({ score, t }) {
         <p className="mt-2 text-amber-200">unverifiable：{score.flag_reason}</p>
       ) : null}
     </div>
+  );
+}
+
+function OpenAISettingsPage({
+  state,
+  settings,
+  apiKey,
+  setApiKey,
+  model,
+  setModel,
+  error,
+  saved,
+  onSubmit,
+  onRefresh,
+  t,
+}) {
+  if (state === "loading" && !settings) {
+    return (
+      <section className="mx-auto max-w-4xl px-8 py-12">
+        <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
+          {t.loadingSettings}
+        </div>
+      </section>
+    );
+  }
+
+  const keyStatus = settings?.api_key_configured ? t.openaiSettingsConfigured : t.openaiSettingsMissing;
+  const keyPreview = settings?.api_key_preview ? ` (${settings.api_key_preview})` : "";
+  const modelOptions = settings?.available_models || [];
+
+  return (
+    <section className="mx-auto max-w-4xl px-8 py-12">
+      <div className="flex items-start justify-between gap-8">
+        <div>
+          <p className="text-sm uppercase text-amber-200">{t.openaiSettingsKicker}</p>
+          <h1 className="mt-2 text-4xl font-semibold">{t.openaiSettingsTitle}</h1>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+        >
+          {t.refresh}
+        </button>
+      </div>
+
+      <form className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-7" onSubmit={onSubmit}>
+        <div className="rounded border border-zinc-700 bg-zinc-950 p-4 text-sm text-zinc-300">
+          <span className="text-zinc-400">{t.openaiSettingsStatus}: </span>
+          <span className={settings?.api_key_configured ? "text-emerald-300" : "text-amber-200"}>
+            {keyStatus}{keyPreview}
+          </span>
+        </div>
+
+        <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="openai-api-key">
+          {t.openaiApiKeyLabel}
+        </label>
+        <input
+          id="openai-api-key"
+          type="password"
+          value={apiKey}
+          onChange={(event) => setApiKey(event.target.value)}
+          className="mt-3 h-12 w-full rounded border border-zinc-700 bg-zinc-950 px-4 text-zinc-100 outline-none transition focus:border-amber-300"
+          placeholder={t.openaiApiKeyPlaceholder}
+          autoComplete="off"
+        />
+
+        <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="openai-model">
+          {t.openaiModelLabel}
+        </label>
+        <input
+          id="openai-model"
+          list="openai-model-options"
+          value={model}
+          onChange={(event) => setModel(event.target.value)}
+          className="mt-3 h-12 w-full rounded border border-zinc-700 bg-zinc-950 px-4 text-zinc-100 outline-none transition focus:border-amber-300"
+          placeholder={t.openaiModelPlaceholder}
+        />
+        <datalist id="openai-model-options">
+          {modelOptions.map((option) => (
+            <option key={option} value={option} />
+          ))}
+        </datalist>
+
+        <p className="mt-4 text-sm leading-6 text-zinc-400">{t.settingsSecurityNote}</p>
+
+        {error ? (
+          <div className="mt-6 rounded border border-red-400/40 bg-red-950/40 p-4 text-sm text-red-100">
+            {error}
+          </div>
+        ) : null}
+
+        {saved ? (
+          <div className="mt-6 rounded border border-emerald-400/40 bg-emerald-950/30 p-4 text-sm text-emerald-100">
+            {t.settingsSaved}
+          </div>
+        ) : null}
+
+        <button
+          type="submit"
+          disabled={state === "saving"}
+          className="mt-7 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+        >
+          {state === "saving" ? t.settingsSaving : t.saveSettings}
+        </button>
+      </form>
+    </section>
   );
 }
 

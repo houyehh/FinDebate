@@ -64,6 +64,8 @@ OPENAI_MODEL=gpt-5.6-luna
 DATABASE_PATH=data/app.db
 ```
 
+也可以啟動前後端後，到前端右上方「設定」頁貼上自己的 OpenAI API key 與模型名稱。前端不會把 key 存進 localStorage；設定會送到本機 FastAPI 後端並寫入 repo root 的 `.env`，下一次辯論會使用新的 key/model。
+
 安裝前端依賴：
 
 ```powershell
@@ -149,6 +151,8 @@ Set-Location ..
 - `POST /api/debates/judged`
 - `POST /api/verdicts`
 - `GET /api/records`
+- `GET /api/settings/openai`
+- `POST /api/settings/openai`
 
 ## 截圖
 

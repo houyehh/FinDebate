@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+from app import settings
 from app.database import ScoreboardResponse, VerdictRecord, VerdictSide, get_scoreboard, save_verdict
 from app.debate import (
     DebateConfigurationError,
@@ -63,6 +64,31 @@ class VerdictSubmitRequest(BaseModel):
     side: VerdictSide
     confidence: int = Field(ge=1, le=5)
     note: str = ""
+
+
+class OpenAISettingsRequest(BaseModel):
+    api_key: str = ""
+    model: str = Field(min_length=1)
+
+
+class OpenAISettingsResponse(BaseModel):
+    api_key_configured: bool
+    api_key_preview: str
+    model: str
+    available_models: list[str]
+
+
+@app.get("/api/settings/openai", response_model=OpenAISettingsResponse)
+def read_openai_settings() -> dict:
+    return settings.read_openai_settings()
+
+
+@app.post("/api/settings/openai", response_model=OpenAISettingsResponse)
+def update_openai_settings(request: OpenAISettingsRequest) -> dict:
+    try:
+        return settings.update_openai_settings(api_key=request.api_key, model=request.model)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
 
 
 @app.post("/api/debates/round-one", response_model=RoundOneDebate)
