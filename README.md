@@ -99,6 +99,20 @@ http://127.0.0.1:5173
 Invoke-RestMethod http://127.0.0.1:8000/api/health
 ```
 
+若 `8000` 被舊的後端 process 佔住、無法清掉，可改用替代 port：
+
+```powershell
+.\.venv\Scripts\uvicorn.exe app.main:app --app-dir backend --host 127.0.0.1 --port 8010
+```
+
+前端改成直連該後端：
+
+```powershell
+Set-Location frontend
+$env:VITE_API_BASE_URL="http://127.0.0.1:8010"
+npm.cmd run dev -- --host 127.0.0.1 --port 5174
+```
+
 ## Demo Seed
 
 Demo seed 會寫入 5 筆「7 天前的假想判斷」，並用 yfinance 抓真實歷史價格完成結算，方便立即展示戰績頁。

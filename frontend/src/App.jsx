@@ -9,6 +9,11 @@ const healthLabels = {
 };
 
 const examples = ["NVDA", "2330.TW", "BTC-USD"];
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+
+function apiUrl(path) {
+  return `${API_BASE_URL}${path}`;
+}
 
 function formatPrice(price, currency, language = "zh-Hant") {
   return new Intl.NumberFormat(language === "en" ? "en-US" : "zh-TW", {
@@ -123,7 +128,7 @@ function App() {
   useEffect(() => {
     let active = true;
 
-    fetch("/api/health")
+    fetch(apiUrl("/api/health"))
       .then((response) => {
         if (!response.ok) {
           throw new Error("Healthcheck failed");
@@ -165,7 +170,7 @@ function App() {
     setError("");
 
     try {
-      const response = await fetch(`/api/tickers/${encodeURIComponent(normalizedTicker)}`);
+      const response = await fetch(apiUrl(`/api/tickers/${encodeURIComponent(normalizedTicker)}`));
       const data = await readApiResponse(response, t.tickerNotFound);
 
       if (!response.ok) {
@@ -192,7 +197,7 @@ function App() {
     setRecordsError("");
 
     try {
-      const response = await fetch("/api/records");
+      const response = await fetch(apiUrl("/api/records"));
       const data = await readApiResponse(response, t.recordsFailed);
 
       if (!response.ok) {
@@ -216,7 +221,7 @@ function App() {
     setDebateError("");
 
     try {
-      const response = await fetch("/api/debates/judged", {
+      const response = await fetch(apiUrl("/api/debates/judged"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ticker: snapshot.ticker, language }),
@@ -256,7 +261,7 @@ function App() {
     setVerdictState("saving");
 
     try {
-      const response = await fetch("/api/verdicts", {
+      const response = await fetch(apiUrl("/api/verdicts"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

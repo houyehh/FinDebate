@@ -375,3 +375,32 @@
 
 ### 下一步
 - 重啟後端與前端後再次測試辯論流程，確認畫面顯示的是實際 OpenAI provider 錯誤，而不是 JSON parse 錯誤。
+
+## 2026-07-19 辯論生成失敗原因追查
+
+### 做了什麼
+- 直接呼叫目前 `127.0.0.1:8000/api/debates/judged`，確認仍回 plain 500，代表瀏覽器連到的 8000 不是最新錯誤處理版本。
+- 用目前工作樹的 FastAPI TestClient in-process 執行同一個 endpoint，確認最新程式實際回 `429` JSON：OpenAI API quota exceeded。
+- 另起乾淨後端 `127.0.0.1:8010`，直接呼叫也確認回 `429` JSON。
+- 發現 Vite proxy 經過殘留/舊環境時仍可能把錯誤變成 plain 500；因此新增前端 `VITE_API_BASE_URL`，可直接指定 API base URL 繞過 proxy。
+- 後端 CORS 增加 `5174`、`5175`，支援替代前端 port 直連後端。
+- README 新增替代 port 啟動方式：後端 8010、前端 5174 + `VITE_API_BASE_URL`。
+
+### 關鍵決定
+- 保留原本 8000/5173 預設流程；替代 port 只用於本機舊 process 卡住或 proxy 行為異常時。
+- 讓前端支援 API base URL，比硬改 Vite proxy 更穩，且不影響測試預設路徑。
+
+### 驗收結果
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：通過，16 passed。
+- `npm.cmd test`：通過，6 passed。
+- `npm.cmd run build`：通過。
+- `127.0.0.1:8010/api/debates/judged`：回 `429` JSON，訊息為 OpenAI quota/billing。
+- `127.0.0.1:5174`：前端可載入，且產出的 App module 已注入 `http://127.0.0.1:8010`。
+- CORS preflight `Origin: http://127.0.0.1:5174` → `127.0.0.1:8010/api/debates/judged`：通過。
+
+### 遇到的問題
+- Windows `netstat` 顯示 8000 有殘留 PID，但 `taskkill` 回報 PID 不存在；為避免空轉，改走乾淨替代 port。
+- 目前真正阻塞仍是 OpenAI 帳號/project quota，不是應用程式流程。
+
+### 下一步
+- 使用 `http://127.0.0.1:5174` 測試畫面；若 quota 未處理，預期會顯示 quota/billing 訊息。
