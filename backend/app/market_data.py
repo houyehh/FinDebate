@@ -22,10 +22,118 @@ class TickerSnapshot(BaseModel):
     history: list[PricePoint] = Field(min_length=1)
 
 
+class TickerSearchResult(BaseModel):
+    ticker: str
+    name: str
+    exchange: str = ""
+    asset_type: str = "equity"
+    currency: str = "USD"
+
+
 @dataclass
 class TickerLookupError(Exception):
     ticker: str
     message: str
+
+
+SEARCH_UNIVERSE: list[dict[str, Any]] = [
+    {
+        "ticker": "NVDA",
+        "name": "NVIDIA Corporation",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["nvidia", "輝達", "英偉達", "gpu", "ai chip", "nvda"],
+    },
+    {
+        "ticker": "AAPL",
+        "name": "Apple Inc.",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["apple", "蘋果", "iphone", "aapl"],
+    },
+    {
+        "ticker": "TSLA",
+        "name": "Tesla, Inc.",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["tesla", "特斯拉", "ev", "tsla"],
+    },
+    {
+        "ticker": "MSFT",
+        "name": "Microsoft Corporation",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["microsoft", "微軟", "azure", "msft"],
+    },
+    {
+        "ticker": "GOOGL",
+        "name": "Alphabet Inc.",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["google", "alphabet", "谷歌", "googl"],
+    },
+    {
+        "ticker": "META",
+        "name": "Meta Platforms, Inc.",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["meta", "facebook", "臉書", "instagram"],
+    },
+    {
+        "ticker": "AMZN",
+        "name": "Amazon.com, Inc.",
+        "exchange": "NASDAQ",
+        "asset_type": "equity",
+        "currency": "USD",
+        "keywords": ["amazon", "亞馬遜", "aws", "amzn"],
+    },
+    {
+        "ticker": "2330.TW",
+        "name": "Taiwan Semiconductor Manufacturing Company",
+        "exchange": "TWSE",
+        "asset_type": "equity",
+        "currency": "TWD",
+        "keywords": ["台積電", "tsmc", "taiwan semiconductor", "2330"],
+    },
+    {
+        "ticker": "2317.TW",
+        "name": "Hon Hai Precision Industry",
+        "exchange": "TWSE",
+        "asset_type": "equity",
+        "currency": "TWD",
+        "keywords": ["鴻海", "foxconn", "hon hai", "2317"],
+    },
+    {
+        "ticker": "2454.TW",
+        "name": "MediaTek Inc.",
+        "exchange": "TWSE",
+        "asset_type": "equity",
+        "currency": "TWD",
+        "keywords": ["聯發科", "mediatek", "2454"],
+    },
+    {
+        "ticker": "BTC-USD",
+        "name": "Bitcoin USD",
+        "exchange": "Crypto",
+        "asset_type": "crypto",
+        "currency": "USD",
+        "keywords": ["bitcoin", "比特幣", "btc", "btc-usd"],
+    },
+    {
+        "ticker": "ETH-USD",
+        "name": "Ethereum USD",
+        "exchange": "Crypto",
+        "asset_type": "crypto",
+        "currency": "USD",
+        "keywords": ["ethereum", "以太幣", "eth", "eth-usd"],
+    },
+]
 
 
 def normalize_ticker(raw_ticker: str) -> str:
@@ -36,6 +144,56 @@ def normalize_ticker(raw_ticker: str) -> str:
             message="Ticker is required. Try examples like NVDA, 2330.TW, or BTC-USD.",
         )
     return ticker
+
+
+def search_tickers(query: str, limit: int = 8) -> list[TickerSearchResult]:
+    cleaned = query.strip()
+    if not cleaned:
+        return []
+    normalized = cleaned.lower()
+    scored: list[tuple[int, dict[str, Any]]] = []
+
+    for item in SEARCH_UNIVERSE:
+        ticker = item["ticker"]
+        haystack = [ticker.lower(), item["name"].lower(), *[keyword.lower() for keyword in item["keywords"]]]
+        if ticker.lower() == normalized:
+            score = 100
+        elif any(value == normalized for value in haystack):
+            score = 90
+        elif any(value.startswith(normalized) for value in haystack):
+            score = 75
+        elif any(normalized in value for value in haystack):
+            score = 55
+        else:
+            continue
+        scored.append((score, item))
+
+    if _looks_like_ticker(cleaned) and not any(item["ticker"].lower() == normalized for _score, item in scored):
+        ticker = normalize_ticker(cleaned)
+        scored.append(
+            (
+                50,
+                {
+                    "ticker": ticker,
+                    "name": ticker,
+                    "exchange": "",
+                    "asset_type": "equity",
+                    "currency": _currency_from_ticker(ticker) or "USD",
+                    "keywords": [],
+                },
+            )
+        )
+
+    return [
+        TickerSearchResult(
+            ticker=item["ticker"],
+            name=item["name"],
+            exchange=item.get("exchange", ""),
+            asset_type=item.get("asset_type", "equity"),
+            currency=item.get("currency", "USD"),
+        )
+        for _score, item in sorted(scored, key=lambda pair: (-pair[0], pair[1]["ticker"]))[:limit]
+    ]
 
 
 def get_ticker_snapshot(raw_ticker: str) -> TickerSnapshot:
@@ -171,6 +329,10 @@ def _currency_from_ticker(ticker: str) -> str | None:
     if ticker.endswith("-USD"):
         return "USD"
     return None
+
+
+def _looks_like_ticker(value: str) -> bool:
+    return bool(value.strip()) and all(ch.isalnum() or ch in ".-" for ch in value.strip())
 
 
 def get_close_near_date(raw_ticker: str, target_date: date) -> float | None:

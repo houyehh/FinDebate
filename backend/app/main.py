@@ -15,11 +15,13 @@ from app.debate import (
     generate_round_one_debate,
     generate_two_round_debate,
 )
-from app.market_data import TickerLookupError, TickerSnapshot, get_ticker_snapshot
+from app.market_data import TickerLookupError, TickerSearchResult, TickerSnapshot, get_ticker_snapshot, search_tickers
 from app.practice import (
     PracticeAttemptRecord,
     PracticeAttemptRequest,
     PracticeDashboardResponse,
+    PracticeQuestionNotFoundError,
+    PracticeValidationError,
     get_practice_dashboard,
     submit_practice_attempt,
 )
@@ -46,6 +48,11 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/tickers/search", response_model=list[TickerSearchResult])
+def search_ticker_candidates(q: str, limit: int = 8) -> list[TickerSearchResult]:
+    return search_tickers(q, limit=limit)
 
 
 @app.get("/api/tickers/{ticker}", response_model=TickerSnapshot)
@@ -208,5 +215,7 @@ def read_practice_dashboard(
 def create_practice_attempt(request: PracticeAttemptRequest) -> PracticeAttemptRecord:
     try:
         return submit_practice_attempt(request)
-    except ValueError as exc:
+    except PracticeValidationError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    except PracticeQuestionNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc

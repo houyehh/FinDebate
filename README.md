@@ -165,12 +165,15 @@ Set-Location ..
 ## 主要 API
 
 - `GET /api/health`
+- `GET /api/tickers/search?q=...`
 - `GET /api/tickers/{ticker}`
 - `POST /api/debates/round-one`
 - `POST /api/debates/two-round`
 - `POST /api/debates/judged`
 - `POST /api/verdicts`
 - `GET /api/records`
+- `GET /api/practice`
+- `POST /api/practice/attempts`
 - `GET /api/settings/openai`
 - `POST /api/settings/openai`
 
@@ -185,6 +188,12 @@ Set-Location ..
 ## English Summary for Judges
 
 Bull vs Bear Arena is a local investment judgment training app. A user enters a ticker, reviews a two-round bull-vs-bear debate, makes a blind verdict before seeing judge scores, and later checks whether that judgment was right using real market prices. The product focuses on decision records, judge source checks, and backtesting rather than trading execution.
+
+### Historical Practice Mode
+
+The Practice page now works as a historical judgment gym. Each drill places the user at a past market date and only shows information visible through that date: OHLCV/K-line data, volume, MA5/MA20, RSI, KD, MACD, volatility, yfinance fundamental proxies, chip-proxy signals, and an AI analysis dimension. The user chooses bull, bear, or neutral, sets confidence, writes a rationale, and assigns weights across technical, fundamental, chip-proxy, and AI dimensions. After submission, the app reveals the real 1D/7D/30D outcomes, compares the user with the AI suggestion, and gives coach feedback about likely reasoning weaknesses.
+
+Ticker lookup also supports keyword-style suggestions. Users can type either symbols or common company/asset names such as `NVDA`, `NVIDIA`, `台積電`, `TSMC`, `Bitcoin`, or `BTC-USD`, then select the matching ticker from a dropdown.
 
 ### Quickstart
 

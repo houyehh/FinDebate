@@ -594,3 +594,40 @@
 ### 下一步
 - 可以讓使用者指定隨機抽題的 ticker 範圍與時間區間。
 - 可以把技術面題目的答錯原因加入個人弱點統計，例如「追高」「忽略量價背離」「MACD 動能判讀錯誤」。
+## 2026-07-21 歷史實測練習、AI 面與股名搜尋
+
+### 做了什麼
+- 將 Practice mode 升級成「Historical Judgment Gym」：每題把使用者放回某個歷史 as-of 日期，只顯示該日以前的市場資料，提交後才揭曉 1D / 7D / 30D 真實回測結果。
+- 重寫 `backend/app/practice.py`，新增技術面、基本面、籌碼 proxy、AI 面四個 snapshot：
+  - 技術面：OHLCV、K 線、MA5 / MA20、RSI、KD、MACD、20 日波動率、量能比。
+  - 基本面：以 yfinance 可取得欄位作 snapshot proxy；demo 題使用本機 profile，避免測試或啟動時依賴網路。
+  - 籌碼面：明確標示為 chip proxy，使用 volume surge、OBV proxy、price-volume read 等，不宣稱是真實法人籌碼。
+  - AI 面：先用 deterministic AI coach 產生多空 thesis、敘事/心理因素、不確定性與使用 AI 的 checklist，避免 OpenAI quota 爆掉時練習流程中斷。
+- 使用者作答新增四面向權重：技術面、基本面、籌碼 proxy、AI 面，後端驗證總和必須等於 100%。
+- 提交後回傳並顯示：參考答案、目標週期報酬、1D/7D/30D 真實回測、使用者是否與 AI 同邊、權重分配、教練回饋、忽略訊號、下一題訓練重點與建議框架。
+- 戰績/練習統計新增 AI 同邊率、同 AI / 不同 AI 正確率、高技術權重與高 AI 權重正確率等能力地圖欄位。
+- 新增 `/api/tickers/search?q=...`，支援代號、英文股名、中文股名與關鍵字搜尋，例如 `輝達`、`台積電`、`TSMC`、`Bitcoin`。
+- 首頁 ticker 輸入改成搜尋式下拉選單，點選建議會直接查詢對應標的。
+- 清理前端 i18n 文案檔，換成可讀繁中/英文；首頁加入「訓練閉環」讓產品主軸更清楚。
+- README 英文評審區塊補上 Historical Practice Mode 與 ticker keyword search 說明。
+
+### 關鍵決定
+- 嚴格避免價格未來資料洩漏：Practice question response 不包含 `answer_side`、`outcome_pct`、`future_results`，這些只在提交答案後回傳。
+- yfinance 不提供完整歷史當日可見基本面資料，因此基本面先標示為 yfinance/latest proxy 或 demo profile；不假裝有完整歷史財報 feed。
+- AI 面先採 deterministic coach 作為預設，因為目前使用者 OpenAI API quota 可能不足；這能讓 demo 與練習功能不被 quota 卡死。
+- 靜態 demo 題不在模組載入時抓 yfinance，避免測試與啟動變慢或依賴網路。
+
+### 遇到的問題
+- 舊 `practice.py` 與 i18n/README 部分中文內容已經有編碼污染；本輪優先重寫 Practice 與 i18n，README 只補可讀英文區塊，未大規模重寫整份文件。
+- FastAPI 路由順序若把 `/api/tickers/{ticker}` 放在 `/api/tickers/search` 前面會吃掉 search route，已將 search route 移到動態 route 前。
+- 前端測試原本用舊亂碼文案與舊 Practice schema，已重寫測試，改驗收股名下拉、歷史題四面向、權重提交與回測揭曉。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：28 passed，1 warning。
+- `npm.cmd test -- --run`：9 passed。
+- `npm.cmd run build`：成功。
+
+### 下一步
+- 可再加入「錯題重刷 / spaced repetition」，讓常見弱點自動決定下一題類型。
+- 若之後 OpenAI API quota 正常，可新增可選的 LLM AI snapshot，並保留 deterministic fallback。
+- README 中文段落仍建議後續完整重寫，避免目前舊段落亂碼影響評審閱讀。

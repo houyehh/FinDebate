@@ -47,3 +47,15 @@ def test_ticker_endpoint_returns_friendly_error(monkeypatch) -> None:
     detail = response.json()["detail"]
     assert "FAKETICKER" in detail["message"]
     assert detail["examples"] == ["NVDA", "2330.TW", "BTC-USD"]
+
+
+def test_ticker_search_supports_company_name_and_chinese_keyword() -> None:
+    client = TestClient(app)
+
+    nvidia = client.get("/api/tickers/search", params={"q": "nvidia"}).json()
+    tsmc = client.get("/api/tickers/search", params={"q": "台積電"}).json()
+
+    assert nvidia[0]["ticker"] == "NVDA"
+    assert nvidia[0]["name"] == "NVIDIA Corporation"
+    assert tsmc[0]["ticker"] == "2330.TW"
+    assert tsmc[0]["currency"] == "TWD"

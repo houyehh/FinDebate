@@ -152,6 +152,23 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(connection, "practice_attempts", "weights_json", "TEXT NOT NULL DEFAULT '{}'")
+        _ensure_column(connection, "practice_attempts", "ai_side", "TEXT")
+        _ensure_column(connection, "practice_attempts", "ai_agreement", "INTEGER")
+
+
+def _ensure_column(
+    connection: sqlite3.Connection,
+    table_name: str,
+    column_name: str,
+    column_definition: str,
+) -> None:
+    columns = {
+        row["name"]
+        for row in connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    }
+    if column_name not in columns:
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_definition}")
 
 
 def save_verdict(

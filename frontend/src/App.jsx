@@ -107,6 +107,9 @@ function App() {
   const [language, setLanguage] = useState(() => localStorage.getItem("language") || "zh-Hant");
   const [health, setHealth] = useState("checking");
   const [ticker, setTicker] = useState("NVDA");
+  const [tickerSuggestions, setTickerSuggestions] = useState([]);
+  const [tickerSuggestionState, setTickerSuggestionState] = useState("idle");
+  const [showTickerSuggestions, setShowTickerSuggestions] = useState(false);
   const [snapshot, setSnapshot] = useState(null);
   const [lookupState, setLookupState] = useState("idle");
   const [error, setError] = useState("");
@@ -172,10 +175,32 @@ function App() {
     }
   }, [activePage, language]);
 
+  useEffect(() => {
+    if (activePage !== "home") {
+      return undefined;
+    }
+
+    const query = ticker.trim();
+    if (query.length < 2) {
+      setTickerSuggestions([]);
+      setTickerSuggestionState("idle");
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => {
+      fetchTickerSuggestions(query);
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [ticker, activePage]);
+
   async function handleSubmit(event) {
     event.preventDefault();
-    const normalizedTicker = ticker.trim();
+    await lookupTicker(ticker);
+  }
 
+  async function lookupTicker(rawTicker) {
+    const normalizedTicker = rawTicker.trim();
     if (!normalizedTicker) {
       setError(t.tickerRequired);
       return;
@@ -198,6 +223,7 @@ function App() {
       setDebateState("idle");
       resetVerdictState();
       setLookupState("ready");
+      setShowTickerSuggestions(false);
     } catch (lookupError) {
       setSnapshot(null);
       setDebate(null);
@@ -205,6 +231,30 @@ function App() {
       setError(lookupError.message);
       setLookupState("error");
     }
+  }
+
+  async function fetchTickerSuggestions(query) {
+    setTickerSuggestionState("loading");
+    try {
+      const response = await fetch(
+        apiUrl(`/api/tickers/search?q=${encodeURIComponent(query)}&limit=8`),
+      );
+      const data = await readApiResponse(response, t.tickerNotFound);
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.tickerNotFound));
+      }
+      setTickerSuggestions(Array.isArray(data) ? data : []);
+      setTickerSuggestionState("ready");
+    } catch {
+      setTickerSuggestions([]);
+      setTickerSuggestionState("error");
+    }
+  }
+
+  function selectTickerSuggestion(candidate) {
+    setTicker(candidate.ticker);
+    setShowTickerSuggestions(false);
+    lookupTicker(candidate.ticker);
   }
 
   async function fetchRecords() {
@@ -494,18 +544,35 @@ function App() {
         <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 p-7">
           <p className="text-sm uppercase text-amber-200">{t.tickerLookup}</p>
           <h1 className="mt-3 text-4xl font-semibold">{t.appTitle}</h1>
+          <p className="mt-4 text-sm leading-6 text-zinc-400">{t.homeSubtitle}</p>
+
+          <div className="mt-6 rounded border border-zinc-800 bg-zinc-950 p-4">
+            <p className="text-xs uppercase text-zinc-500">{t.trainingLoopTitle}</p>
+            <div className="mt-3 grid grid-cols-5 gap-2 text-center text-xs text-zinc-300">
+              {t.trainingLoopSteps.map((step, index) => (
+                <div key={step} className="rounded border border-zinc-800 bg-zinc-900 px-2 py-2">
+                  <span className="mr-1 text-amber-200">{index + 1}</span>
+                  {step}
+                </div>
+              ))}
+            </div>
+          </div>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-zinc-300" htmlFor="ticker-input">
               {t.tickerLabel}
             </label>
-            <div className="flex gap-3">
+            <div className="relative flex gap-3">
               <input
                 id="ticker-input"
                 value={ticker}
-                onChange={(event) => setTicker(event.target.value)}
-                className="h-12 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-4 text-lg font-semibold uppercase tracking-wide text-zinc-100 outline-none ring-0 transition focus:border-emerald-300"
-                placeholder="NVDA"
+                onChange={(event) => {
+                  setTicker(event.target.value);
+                  setShowTickerSuggestions(true);
+                }}
+                onFocus={() => setShowTickerSuggestions(true)}
+                className="h-12 min-w-0 flex-1 rounded border border-zinc-700 bg-zinc-950 px-4 text-lg font-semibold text-zinc-100 outline-none ring-0 transition focus:border-emerald-300"
+                placeholder={t.tickerSearchPlaceholder}
               />
               <button
                 type="submit"
@@ -514,6 +581,38 @@ function App() {
               >
                 {lookupState === "loading" ? t.searching : t.search}
               </button>
+              {showTickerSuggestions && ticker.trim().length >= 2 ? (
+                <div className="absolute left-0 top-14 z-20 w-[calc(100%-6.25rem)] overflow-hidden rounded border border-zinc-700 bg-zinc-950 shadow-xl">
+                  <div className="border-b border-zinc-800 px-3 py-2 text-xs uppercase text-zinc-500">
+                    {t.tickerSuggestions}
+                  </div>
+                  {tickerSuggestions.length ? (
+                    <div className="max-h-72 overflow-auto">
+                      {tickerSuggestions.map((candidate) => (
+                        <button
+                          key={candidate.ticker}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectTickerSuggestion(candidate)}
+                          className="flex w-full items-center justify-between gap-4 border-b border-zinc-900 px-3 py-3 text-left transition last:border-b-0 hover:bg-zinc-900"
+                        >
+                          <span>
+                            <span className="block font-semibold text-zinc-100">{candidate.ticker}</span>
+                            <span className="block text-xs text-zinc-400">{candidate.name}</span>
+                          </span>
+                          <span className="text-xs text-zinc-500">
+                            {candidate.exchange || candidate.asset_type} · {candidate.currency}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="px-3 py-4 text-sm text-zinc-500">
+                      {tickerSuggestionState === "loading" ? t.searching : t.tickerNoSuggestions}
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           </form>
 
@@ -929,6 +1028,12 @@ function PracticePage({
   const [side, setSide] = useState("bull");
   const [confidence, setConfidence] = useState(3);
   const [rationale, setRationale] = useState("");
+  const [weights, setWeights] = useState({
+    technical: 35,
+    fundamental: 20,
+    chip: 20,
+    ai: 25,
+  });
   const [attempt, setAttempt] = useState(null);
   const [submitState, setSubmitState] = useState("idle");
   const [submitError, setSubmitError] = useState("");
@@ -939,6 +1044,7 @@ function PracticePage({
     setSide("bull");
     setConfidence(3);
     setRationale("");
+    setWeights({ technical: 35, fundamental: 20, chip: 20, ai: 25 });
     setAttempt(null);
     setSubmitError("");
     setSubmitState("idle");
@@ -986,6 +1092,7 @@ function PracticePage({
         confidence,
         rationale,
         language,
+        weights,
       });
       setAttempt(result);
       setSubmitState("saved");
@@ -1006,6 +1113,7 @@ function PracticePage({
 
   const stats = data?.stats;
   const recentAttempts = data?.recent_attempts || [];
+  const weightTotal = weights.technical + weights.fundamental + weights.chip + weights.ai;
 
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
@@ -1037,6 +1145,11 @@ function PracticePage({
             value={formatPercent(stats.low_confidence_accuracy_rate, t)}
           />
           <StatBox label={t.practiceMostCommonFocus} value={stats.most_common_focus || t.unavailable} />
+          <StatBox label={t.aiAlignmentRate} value={formatPercent(stats.ai_alignment_rate, t)} />
+          <StatBox label={t.aiAlignedAccuracy} value={formatPercent(stats.ai_aligned_accuracy_rate, t)} />
+          <StatBox label={t.aiUnalignedAccuracy} value={formatPercent(stats.ai_unaligned_accuracy_rate, t)} />
+          <StatBox label={t.highTechnicalWeightAccuracy} value={formatPercent(stats.high_technical_weight_accuracy_rate, t)} />
+          <StatBox label={t.highAiWeightAccuracy} value={formatPercent(stats.high_ai_weight_accuracy_rate, t)} />
         </div>
       ) : null}
 
@@ -1048,6 +1161,9 @@ function PracticePage({
                 {t.practiceQuestion} {currentIndex + 1}/{questions.length}
               </p>
               <h2 className="mt-2 text-3xl font-semibold">{question.ticker}: {question.title}</h2>
+              <p className="mt-2 text-sm text-zinc-500">
+                {t.dataCutoff}: {question.as_of}
+              </p>
             </div>
             <div className="text-right text-sm text-zinc-400">
               <p>{question.horizon_days}D</p>
@@ -1056,6 +1172,15 @@ function PracticePage({
           </div>
 
           <p className="mt-6 text-sm leading-6 text-zinc-300">{question.scenario}</p>
+          {question.training_goal ? (
+            <div className="mt-5 rounded border border-amber-300/30 bg-amber-950/20 p-4 text-sm leading-6 text-amber-100">
+              <span className="font-semibold">{t.trainingGoal}: </span>
+              {question.training_goal}
+            </div>
+          ) : null}
+          {question.data_cutoff_note ? (
+            <p className="mt-3 text-xs leading-5 text-zinc-500">{question.data_cutoff_note}</p>
+          ) : null}
           <div className="mt-5 flex flex-wrap gap-2">
             {question.focus_tags.map((tag) => (
               <span key={tag} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400">
@@ -1079,6 +1204,13 @@ function PracticePage({
               <MarketIndicatorChart points={question.market_window} t={t} />
             </div>
           ) : null}
+
+          <div className="mt-6 grid grid-cols-2 gap-4">
+            <MetricPanel title={t.technicalDimension} metrics={question.technical_snapshot || []} />
+            <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
+            <MetricPanel title={t.chipDimension} metrics={question.chip_snapshot || []} />
+            <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} />
+          </div>
 
           <div className="mt-7 grid grid-cols-2 gap-5">
             <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
@@ -1127,6 +1259,45 @@ function PracticePage({
               className="mt-3 w-full accent-amber-300"
             />
 
+            <div className="mt-6">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-zinc-300">{t.judgmentWeights}</p>
+                <p className={weightTotal === 100 ? "text-sm text-emerald-300" : "text-sm text-red-300"}>
+                  {t.weightTotal}: {weightTotal}%
+                </p>
+              </div>
+              <p className="mt-1 text-xs text-zinc-500">{t.weightTotalHint}</p>
+              <div className="mt-4 space-y-4">
+                {[
+                  ["technical", t.technicalDimension],
+                  ["fundamental", t.fundamentalDimension],
+                  ["chip", t.chipDimension],
+                  ["ai", t.aiDimension],
+                ].map(([key, label]) => (
+                  <label key={key} className="block text-xs text-zinc-400">
+                    <div className="mb-2 flex justify-between">
+                      <span>{label}</span>
+                      <span>{weights[key]}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={weights[key]}
+                      onChange={(event) =>
+                        setWeights((current) => ({
+                          ...current,
+                          [key]: Number(event.target.value),
+                        }))
+                      }
+                      className="w-full accent-amber-300"
+                    />
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="practice-rationale">
               {t.practiceRationaleLabel}
             </label>
@@ -1146,7 +1317,7 @@ function PracticePage({
 
             <button
               type="submit"
-              disabled={submitState === "saving"}
+              disabled={submitState === "saving" || weightTotal !== 100}
               className="mt-6 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
             >
               {submitState === "saving" ? t.submittingPractice : t.submitPractice}
@@ -1181,6 +1352,87 @@ function PracticePage({
       </div>
     </section>
   );
+}
+
+function MetricPanel({ title, metrics }) {
+  return (
+    <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+      <h3 className="font-semibold text-zinc-100">{title}</h3>
+      {metrics.length ? (
+        <div className="mt-3 space-y-2">
+          {metrics.map((metric) => (
+            <div key={`${title}-${metric.label}`} className="rounded border border-zinc-800 bg-zinc-900 p-3">
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-xs text-zinc-500">{metric.label}</p>
+                <span className={`text-xs font-semibold ${metricToneClass(metric.tone)}`}>
+                  {metric.value}
+                </span>
+              </div>
+              {metric.detail ? <p className="mt-2 text-xs leading-5 text-zinc-400">{metric.detail}</p> : null}
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-3 text-sm text-zinc-500">No data</p>
+      )}
+    </div>
+  );
+}
+
+function AiSnapshotPanel({ snapshot, t }) {
+  if (!snapshot) {
+    return <MetricPanel title={t.aiDimension} metrics={[]} />;
+  }
+
+  return (
+    <div className="rounded border border-amber-300/30 bg-amber-950/10 p-4">
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="font-semibold text-zinc-100">{t.aiDimension}</h3>
+        <div className="text-right text-xs text-amber-200">
+          <p>{t.aiSuggestedSide}: {sideLabel(snapshot.suggested_side, t)}</p>
+          <p>{t.aiConfidence}: {snapshot.confidence}/5</p>
+        </div>
+      </div>
+      <div className="mt-3 space-y-3 text-xs leading-5 text-zinc-300">
+        <p>
+          <span className="font-semibold text-emerald-300">{t.aiBullThesis}: </span>
+          {snapshot.bull_thesis}
+        </p>
+        <p>
+          <span className="font-semibold text-red-300">{t.aiBearThesis}: </span>
+          {snapshot.bear_thesis}
+        </p>
+        <p>
+          <span className="font-semibold text-zinc-100">{t.aiNarrative}: </span>
+          {snapshot.narrative}
+        </p>
+        <p>
+          <span className="font-semibold text-zinc-100">{t.aiUncertainty}: </span>
+          {snapshot.key_uncertainty}
+        </p>
+      </div>
+      {snapshot.checklist?.length ? (
+        <ul className="mt-3 space-y-1 text-xs leading-5 text-zinc-400">
+          {snapshot.checklist.map((item) => (
+            <li key={item}>{item}</li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function metricToneClass(tone) {
+  if (tone === "bull") {
+    return "text-emerald-300";
+  }
+  if (tone === "bear") {
+    return "text-red-300";
+  }
+  if (tone === "warn") {
+    return "text-amber-300";
+  }
+  return "text-zinc-300";
 }
 
 function PracticeClueList({ title, tone, items }) {
@@ -1220,10 +1472,58 @@ function PracticeFeedbackPanel({ attempt, onNext, t }) {
           <span className="text-zinc-500">{t.practiceOutcome}</span>
           <p className="mt-1 font-semibold text-zinc-100">{formatSignedPercent(attempt.outcome_pct)}</p>
         </div>
+        <div className="rounded border border-zinc-700 bg-zinc-950 p-3">
+          <span className="text-zinc-500">{t.aiComparison}</span>
+          <p className="mt-1 font-semibold text-zinc-100">
+            {attempt.ai_agreement ? t.aiAligned : t.aiDifferent}
+          </p>
+        </div>
+        <div className="rounded border border-zinc-700 bg-zinc-950 p-3">
+          <span className="text-zinc-500">{t.judgmentWeights}</span>
+          <p className="mt-1 text-xs leading-5 text-zinc-300">
+            {t.technicalDimension} {attempt.weights.technical}% · {t.fundamentalDimension} {attempt.weights.fundamental}% · {t.chipDimension} {attempt.weights.chip}% · {t.aiDimension} {attempt.weights.ai}%
+          </p>
+        </div>
       </div>
+
+      {attempt.future_results?.length ? (
+        <div className="mt-4 rounded border border-zinc-700 bg-zinc-950 p-3">
+          <p className="text-sm font-semibold text-zinc-100">{t.futureResults}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-zinc-300">
+            {attempt.future_results.map((item) => (
+              <div key={item.horizon_days} className="rounded border border-zinc-800 bg-zinc-900 p-2">
+                <p className="text-zinc-500">{item.horizon_days}D · {item.settle_date}</p>
+                <p className="mt-1 font-semibold text-zinc-100">
+                  {item.settle_price.toFixed(2)} ({formatSignedPercent(item.pct_change)})
+                </p>
+                <p className="mt-1 text-zinc-400">{sideLabel(item.result_side, t)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       <FeedbackList title={t.practiceCauses} items={attempt.feedback.probable_causes} />
       <FeedbackList title={t.practiceSteps} items={attempt.feedback.improvement_steps} />
+      <FeedbackList title={t.missedSignals} items={attempt.feedback.missed_signals || []} />
+      <FeedbackList title={t.goodReasoning} items={attempt.feedback.good_reasoning || []} />
+
+      {attempt.feedback.next_drill_focus || attempt.feedback.suggested_framework ? (
+        <div className="mt-5 rounded border border-zinc-700 bg-zinc-950 p-4 text-sm leading-6 text-zinc-300">
+          {attempt.feedback.next_drill_focus ? (
+            <p>
+              <span className="font-semibold text-zinc-100">{t.nextDrillFocus}: </span>
+              {attempt.feedback.next_drill_focus}
+            </p>
+          ) : null}
+          {attempt.feedback.suggested_framework ? (
+            <p className="mt-2">
+              <span className="font-semibold text-zinc-100">{t.suggestedFramework}: </span>
+              {attempt.feedback.suggested_framework}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {attempt.feedback.focus_tags.map((tag) => (
@@ -1245,6 +1545,10 @@ function PracticeFeedbackPanel({ attempt, onNext, t }) {
 }
 
 function FeedbackList({ title, items }) {
+  if (!items?.length) {
+    return null;
+  }
+
   return (
     <div className="mt-5">
       <h4 className="text-sm font-semibold text-zinc-100">{title}</h4>
