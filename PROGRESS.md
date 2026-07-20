@@ -480,3 +480,25 @@
 
 ### 下一步
 - 使用 `http://127.0.0.1:5184/` 可繼續測試 Demo 模式；若仍看到舊錯誤，直接重新整理頁面即可。
+
+## 2026-07-20 OpenAI Build Week 投稿規則檢查與 README 補強
+
+### 做了什麼
+- 使用 Devpost Hackathons 工具查到目前參與的比賽為 `OpenAI Build Week`，狀態為 `submissions_open`，且專案 `Bull vs Bear Arena` 已經有 published/submitted Devpost project。
+- 讀取官方規則、提交要求、關鍵日期與最新公告，確認需要 demo video、repo URL、/feedback Session ID、category、英文材料或英文翻譯。
+- 檢查本機 README，發現 `Codex 使用說明` 空白，且 README 主要為中文，可能影響規則符合度與評審理解。
+- 在 README 補上英文 `English Summary for Judges`，包含專案摘要、Quickstart、Demo Mode 測試路徑、Codex/GPT-5.6 使用說明與 built-with 清單。
+
+### 關鍵決定
+- 不重寫整份 README，先補一段完整英文評審入口，快速滿足英文翻譯與 Codex/GPT-5.6 說明需求。
+- 保留既有中文 README，避免臨近投稿時大幅改動已驗證的操作說明。
+
+### 驗收測試
+- 文件-only 變更，未重跑完整測試；前一輪 CORS 修正後端測試為 22 passed。
+
+### 遇到的問題
+- 規則要求 public repo 有 relevant licensing；目前 repo 未看到 `LICENSE` 檔，需由使用者決定授權方式後再補。
+- Devpost submission 還需要使用者提供 YouTube demo video URL 與 `/feedback` Session ID，這兩項無法由本機程式自動推定。
+
+### 下一步
+- 由使用者確認授權（建議 MIT 或 Apache-2.0）與提供 demo video URL、/feedback Session ID、submitter type、country/category 後，可協助更新 Devpost submission。

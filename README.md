@@ -181,3 +181,60 @@ Set-Location ..
 - `screenshots/03_records.png`
 
 ## Codex 使用說明
+
+## English Summary for Judges
+
+Bull vs Bear Arena is a local investment judgment training app. A user enters a ticker, reviews a two-round bull-vs-bear debate, makes a blind verdict before seeing judge scores, and later checks whether that judgment was right using real market prices. The product focuses on decision records, judge source checks, and backtesting rather than trading execution.
+
+### Quickstart
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\pip.exe install -r backend\requirements.txt
+Copy-Item .env.example .env
+Set-Location frontend
+npm.cmd install
+Set-Location ..
+```
+
+Run the backend:
+
+```powershell
+.\.venv\Scripts\uvicorn.exe app.main:app --app-dir backend --host 127.0.0.1 --port 8000 --reload
+```
+
+Run the frontend:
+
+```powershell
+Set-Location frontend
+npm.cmd run dev -- --host 127.0.0.1 --port 5173
+```
+
+Open `http://127.0.0.1:5173`.
+
+### Judge Testing Path
+
+If OpenAI API quota is unavailable, open the Settings page and switch Debate Mode to `Demo Mode`. Demo Mode uses deterministic sample debate and judge data, so judges can test ticker lookup, the debate UI, blind verdict flow, judge reveal, and scoreboard behavior without spending API credits.
+
+To seed settled scoreboard records:
+
+```powershell
+.\.venv\Scripts\python.exe scripts\demo_seed.py --demo-seed
+```
+
+### How Codex and GPT-5.6 Were Used
+
+Codex was used throughout the project as the primary engineering partner: scaffolding the FastAPI and React/Vite app, implementing yfinance ticker validation, designing the SQLite schema, building the two-round debate flow, adding judge scoring, writing tests, debugging OpenAI provider errors, adding BYOK settings, and tightening local CORS/dev-port behavior.
+
+GPT-5.6 was used in the intended product path as the bull, bear, and judge model. The prompts require structured JSON output validated by the backend with Pydantic schemas. During development, GPT-5.6/Codex also shaped the product decisions around blind judging, demo fallback, and API-key handling.
+
+Key decisions made during the build:
+
+- Keep the app local-first with SQLite, because the hackathon demo does not need accounts, deployment, or brokerage integrations.
+- Make blind verdict submission happen before judge scores are revealed, because the core product is judgment training rather than passive AI advice.
+- Store user-provided API keys only in the local backend `.env`, not in browser localStorage or the SQLite record database.
+- Add Demo Mode so the full product can be tested and recorded even when OpenAI API quota is exhausted.
+
+### Built With
+
+Python, FastAPI, React, Vite, Tailwind CSS, SQLite, yfinance, OpenAI API, Codex, GPT-5.6.
