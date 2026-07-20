@@ -1,3 +1,4 @@
+import pytest
 from fastapi.testclient import TestClient
 
 from app import debate
@@ -51,6 +52,11 @@ def _snapshot() -> TickerSnapshot:
             PricePoint(date="2026-06-03", close=123.45),
         ],
     )
+
+
+@pytest.fixture(autouse=True)
+def force_api_mode(monkeypatch) -> None:
+    monkeypatch.setattr(debate, "get_debate_mode", lambda: "api")
 
 
 def test_round_one_debate_endpoint_returns_two_opening_rounds(monkeypatch) -> None:

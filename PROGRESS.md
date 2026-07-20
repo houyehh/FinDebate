@@ -456,3 +456,27 @@
 
 ### 下一步
 - 若要拍比賽 demo，建議先切到 `Demo 模式` 完成辯論、盲判與裁判揭曉畫面，再執行 `scripts/demo_seed.py --demo-seed` 展示戰績頁。
+
+## 2026-07-20 修正 5184 前端 port 的 CORS fetch 失敗
+
+### 做了什麼
+- 追查 `http://127.0.0.1:5184/` 畫面出現 `Failed to fetch` 的原因。
+- 確認後端 `8020` 的 `/api/health` 與 `/api/settings/openai` 都正常，問題不是 API 掛掉。
+- 發現後端 CORS 白名單只允許 `5173`、`5174`、`5175`，但目前乾淨前端跑在 `5184`，瀏覽器跨 port 呼叫 `8020` 被擋。
+- 後端新增 localhost Vite port regex，允許 `http://127.0.0.1:51xx` 與 `http://localhost:51xx` 的本機開發來源。
+- 新增 CORS preflight 測試，覆蓋 `http://127.0.0.1:5184`。
+
+### 關鍵決定
+- 保留原本明確白名單，同時補上只限 localhost/127.0.0.1 的 `51xx` regex；不開放任意外部 origin。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：22 passed。
+- 實際 preflight `Origin: http://127.0.0.1:5184` → `http://127.0.0.1:8020/api/settings/openai`：回 200，`Access-Control-Allow-Origin` 正確。
+- 重新整理 in-app browser 的 `http://127.0.0.1:5184/`：首頁顯示 `API: ok`。
+
+### 遇到的問題
+- 本機同時有多個舊後端 process 佔用 `8000`/`8010`，因此用 `8020` 作為乾淨後端驗證目標。
+- 因為 `.env` 已切到 Demo 模式，舊 debate endpoint 測試會受本機環境影響；已加測試 fixture 固定一般測試走 API 模式，避免環境污染。
+
+### 下一步
+- 使用 `http://127.0.0.1:5184/` 可繼續測試 Demo 模式；若仍看到舊錯誤，直接重新整理頁面即可。
