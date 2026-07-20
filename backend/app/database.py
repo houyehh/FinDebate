@@ -127,6 +127,22 @@ def init_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS practice_attempts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                question_id TEXT NOT NULL,
+                selected_side TEXT NOT NULL,
+                confidence INTEGER NOT NULL,
+                rationale TEXT NOT NULL,
+                answer_side TEXT NOT NULL,
+                outcome_pct REAL NOT NULL,
+                result TEXT NOT NULL,
+                feedback_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def save_verdict(

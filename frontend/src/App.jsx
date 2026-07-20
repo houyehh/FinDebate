@@ -123,6 +123,9 @@ function App() {
   const [recordsState, setRecordsState] = useState("idle");
   const [recordsData, setRecordsData] = useState(null);
   const [recordsError, setRecordsError] = useState("");
+  const [practiceState, setPracticeState] = useState("idle");
+  const [practiceData, setPracticeData] = useState(null);
+  const [practiceError, setPracticeError] = useState("");
   const [settingsState, setSettingsState] = useState("idle");
   const [openAISettings, setOpenAISettings] = useState(null);
   const [settingsApiKey, setSettingsApiKey] = useState("");
@@ -162,10 +165,12 @@ function App() {
   useEffect(() => {
     if (activePage === "records") {
       fetchRecords();
+    } else if (activePage === "practice") {
+      fetchPractice();
     } else if (activePage === "settings") {
       fetchOpenAISettings();
     }
-  }, [activePage]);
+  }, [activePage, language]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -245,6 +250,44 @@ function App() {
       setSettingsError(settingsLookupError.message);
       setSettingsState("error");
     }
+  }
+
+  async function fetchPractice({ silent = false } = {}) {
+    if (!silent) {
+      setPracticeState("loading");
+    }
+    setPracticeError("");
+
+    try {
+      const response = await fetch(apiUrl(`/api/practice?language=${encodeURIComponent(language)}`));
+      const data = await readApiResponse(response, t.practiceFailed);
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.practiceFailed));
+      }
+
+      setPracticeData(data);
+      setPracticeState("ready");
+    } catch (practiceLookupError) {
+      setPracticeError(practiceLookupError.message);
+      setPracticeState("error");
+    }
+  }
+
+  async function handleSubmitPracticeAttempt(payload) {
+    const response = await fetch(apiUrl("/api/practice/attempts"), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await readApiResponse(response, t.practiceSubmitFailed);
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.practiceSubmitFailed));
+    }
+
+    await fetchPractice({ silent: true });
+    return data;
   }
 
   async function handleStartDebate() {
@@ -390,6 +433,17 @@ function App() {
                 }`}
               >
                 {t.navRecords}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("practice")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "practice"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                {t.navPractice}
               </button>
               <button
                 type="button"
@@ -595,6 +649,16 @@ function App() {
           data={recordsData}
           error={recordsError}
           onRefresh={fetchRecords}
+          t={t}
+        />
+      ) : activePage === "practice" ? (
+        <PracticePage
+          state={practiceState}
+          data={practiceData}
+          error={practiceError}
+          language={language}
+          onRefresh={fetchPractice}
+          onSubmitAttempt={handleSubmitPracticeAttempt}
           t={t}
         />
       ) : (
@@ -846,6 +910,326 @@ function ScoreStrip({ score, t }) {
       {score.flag === "unverifiable" ? (
         <p className="mt-2 text-amber-200">unverifiable：{score.flag_reason}</p>
       ) : null}
+    </div>
+  );
+}
+
+function PracticePage({
+  state,
+  data,
+  error,
+  language,
+  onRefresh,
+  onSubmitAttempt,
+  t,
+}) {
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [side, setSide] = useState("bull");
+  const [confidence, setConfidence] = useState(3);
+  const [rationale, setRationale] = useState("");
+  const [attempt, setAttempt] = useState(null);
+  const [submitState, setSubmitState] = useState("idle");
+  const [submitError, setSubmitError] = useState("");
+  const questions = data?.questions || [];
+  const question = questions[currentIndex] || questions[0];
+
+  useEffect(() => {
+    setSide("bull");
+    setConfidence(3);
+    setRationale("");
+    setAttempt(null);
+    setSubmitError("");
+    setSubmitState("idle");
+  }, [question?.id]);
+
+  if (state === "loading" && !data) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
+          {t.loadingPractice}
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-red-400/40 bg-red-950/40 p-5 text-red-100">
+          {error}
+        </div>
+      </section>
+    );
+  }
+
+  if (!question) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-8 text-zinc-400">
+          {t.practiceNoQuestions}
+        </div>
+      </section>
+    );
+  }
+
+  async function submitAttempt(event) {
+    event.preventDefault();
+    setSubmitState("saving");
+    setSubmitError("");
+
+    try {
+      const result = await onSubmitAttempt({
+        question_id: question.id,
+        side,
+        confidence,
+        rationale,
+        language,
+      });
+      setAttempt(result);
+      setSubmitState("saved");
+    } catch (practiceSubmitError) {
+      setSubmitError(practiceSubmitError.message);
+      setSubmitState("error");
+    }
+  }
+
+  function goToNextQuestion() {
+    setCurrentIndex((index) => (index + 1) % questions.length);
+  }
+
+  const stats = data?.stats;
+  const recentAttempts = data?.recent_attempts || [];
+
+  return (
+    <section className="mx-auto max-w-6xl px-8 py-12">
+      <div className="flex items-start justify-between gap-8">
+        <div>
+          <p className="text-sm uppercase text-amber-200">{t.practiceKicker}</p>
+          <h1 className="mt-2 text-4xl font-semibold">{t.practiceTitle}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">{t.practiceSubtitle}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+        >
+          {t.refresh}
+        </button>
+      </div>
+
+      {stats ? (
+        <div className="mt-8 grid grid-cols-5 gap-4">
+          <StatBox label={t.practiceTotalAttempts} value={stats.total_attempts} />
+          <StatBox label={t.practiceAccuracy} value={formatPercent(stats.accuracy_rate, t)} />
+          <StatBox
+            label={t.practiceHighConfidenceAccuracy}
+            value={formatPercent(stats.high_confidence_accuracy_rate, t)}
+          />
+          <StatBox
+            label={t.practiceLowConfidenceAccuracy}
+            value={formatPercent(stats.low_confidence_accuracy_rate, t)}
+          />
+          <StatBox label={t.practiceMostCommonFocus} value={stats.most_common_focus || t.unavailable} />
+        </div>
+      ) : null}
+
+      <div className="mt-8 grid grid-cols-[1.2fr_0.8fr] gap-8">
+        <article className="rounded-lg border border-zinc-800 bg-zinc-900 p-7">
+          <div className="flex items-start justify-between gap-6">
+            <div>
+              <p className="text-sm uppercase text-zinc-400">
+                {t.practiceQuestion} {currentIndex + 1}/{questions.length}
+              </p>
+              <h2 className="mt-2 text-3xl font-semibold">{question.ticker}: {question.title}</h2>
+            </div>
+            <div className="text-right text-sm text-zinc-400">
+              <p>{question.horizon_days}D</p>
+              <p>{formatPrice(question.price, question.currency, language)}</p>
+            </div>
+          </div>
+
+          <p className="mt-6 text-sm leading-6 text-zinc-300">{question.scenario}</p>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {question.focus_tags.map((tag) => (
+              <span key={tag} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400">
+                {tag}
+              </span>
+            ))}
+          </div>
+
+          <div className="mt-7 grid grid-cols-2 gap-5">
+            <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
+            <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points} />
+          </div>
+
+          <p className="mt-7 rounded border border-amber-300/30 bg-amber-950/20 p-4 text-sm text-amber-100">
+            {question.prompt}
+          </p>
+        </article>
+
+        <div className="space-y-6">
+          <form className="rounded-lg border border-zinc-800 bg-zinc-900 p-6" onSubmit={submitAttempt}>
+            <p className="text-sm uppercase text-amber-200">{t.practiceYourAnswer}</p>
+            <div className="mt-5 grid grid-cols-3 gap-3">
+              {[
+                ["bull", t.bullSide],
+                ["bear", t.bearSide],
+                ["neutral", t.neutralSide],
+              ].map(([value, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setSide(value)}
+                  className={`rounded px-3 py-2 text-sm font-semibold transition ${
+                    side === value
+                      ? "bg-amber-300 text-zinc-950"
+                      : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="practice-confidence">
+              {t.confidence} {confidence}
+            </label>
+            <input
+              id="practice-confidence"
+              type="range"
+              min="1"
+              max="5"
+              value={confidence}
+              onChange={(event) => setConfidence(Number(event.target.value))}
+              className="mt-3 w-full accent-amber-300"
+            />
+
+            <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="practice-rationale">
+              {t.practiceRationaleLabel}
+            </label>
+            <textarea
+              id="practice-rationale"
+              value={rationale}
+              onChange={(event) => setRationale(event.target.value)}
+              placeholder={t.practiceRationalePlaceholder}
+              className="mt-3 h-32 w-full resize-none rounded border border-zinc-700 bg-zinc-950 p-3 text-zinc-100 outline-none transition focus:border-amber-300"
+            />
+
+            {submitError ? (
+              <div className="mt-5 rounded border border-red-400/40 bg-red-950/40 p-3 text-sm text-red-100">
+                {submitError}
+              </div>
+            ) : null}
+
+            <button
+              type="submit"
+              disabled={submitState === "saving"}
+              className="mt-6 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+            >
+              {submitState === "saving" ? t.submittingPractice : t.submitPractice}
+            </button>
+          </form>
+
+          {attempt ? (
+            <PracticeFeedbackPanel attempt={attempt} onNext={goToNextQuestion} t={t} />
+          ) : null}
+        </div>
+      </div>
+
+      <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
+        <h2 className="text-xl font-semibold">{t.practiceRecent}</h2>
+        {recentAttempts.length ? (
+          <div className="mt-4 grid grid-cols-5 gap-3 text-sm">
+            {recentAttempts.map((item) => (
+              <div key={item.id} className="rounded border border-zinc-800 bg-zinc-950 p-3">
+                <p className="font-semibold text-zinc-100">{item.ticker}</p>
+                <p className={item.result === "correct" ? "mt-2 text-emerald-300" : "mt-2 text-red-300"}>
+                  {item.result === "correct" ? t.practiceCorrect : t.practiceWrong}
+                </p>
+                <p className="mt-1 text-zinc-400">
+                  {sideLabel(item.selected_side, t)} / {item.confidence}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-zinc-400">{t.practiceNoAttempts}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function PracticeClueList({ title, tone, items }) {
+  const toneClass =
+    tone === "bull"
+      ? "border-emerald-400/30 bg-emerald-950/20"
+      : "border-red-400/30 bg-red-950/20";
+
+  return (
+    <div className={`rounded border p-4 ${toneClass}`}>
+      <h3 className="font-semibold text-zinc-100">{title}</h3>
+      <ul className="mt-3 space-y-2 text-sm leading-6 text-zinc-300">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function PracticeFeedbackPanel({ attempt, onNext, t }) {
+  const isCorrect = attempt.result === "correct";
+
+  return (
+    <div className={`rounded-lg border p-6 ${isCorrect ? "border-emerald-400/40 bg-emerald-950/20" : "border-red-400/40 bg-red-950/20"}`}>
+      <p className="text-sm uppercase text-amber-200">{t.practiceFeedback}</p>
+      <h3 className="mt-2 text-2xl font-semibold">
+        {isCorrect ? t.practiceCorrect : t.practiceWrong}
+      </h3>
+      <p className="mt-4 text-sm leading-6 text-zinc-200">{attempt.feedback.summary}</p>
+      <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-zinc-300">
+        <div className="rounded border border-zinc-700 bg-zinc-950 p-3">
+          <span className="text-zinc-500">{t.practiceAnswer}</span>
+          <p className="mt-1 font-semibold text-zinc-100">{sideLabel(attempt.answer_side, t)}</p>
+        </div>
+        <div className="rounded border border-zinc-700 bg-zinc-950 p-3">
+          <span className="text-zinc-500">{t.practiceOutcome}</span>
+          <p className="mt-1 font-semibold text-zinc-100">{formatSignedPercent(attempt.outcome_pct)}</p>
+        </div>
+      </div>
+
+      <FeedbackList title={t.practiceCauses} items={attempt.feedback.probable_causes} />
+      <FeedbackList title={t.practiceSteps} items={attempt.feedback.improvement_steps} />
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        {attempt.feedback.focus_tags.map((tag) => (
+          <span key={tag} className="rounded border border-zinc-700 bg-zinc-950 px-2 py-1 text-xs text-zinc-400">
+            {tag}
+          </span>
+        ))}
+      </div>
+
+      <button
+        type="button"
+        onClick={onNext}
+        className="mt-6 h-11 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200"
+      >
+        {t.nextQuestion}
+      </button>
+    </div>
+  );
+}
+
+function FeedbackList({ title, items }) {
+  return (
+    <div className="mt-5">
+      <h4 className="text-sm font-semibold text-zinc-100">{title}</h4>
+      <ul className="mt-2 space-y-2 text-sm leading-6 text-zinc-300">
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -1155,6 +1539,10 @@ function sideLabel(side, t) {
 
 function formatPercent(value, t) {
   return value == null ? t.unavailable : `${value}%`;
+}
+
+function formatSignedPercent(value) {
+  return `${value > 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
 }
 
 export default App;

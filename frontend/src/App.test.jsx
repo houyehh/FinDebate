@@ -71,6 +71,64 @@ describe("App", () => {
         });
       }
 
+      if (url === "/api/practice/attempts") {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              id: 1,
+              question_id: "nvda-ai-guidance",
+              ticker: "NVDA",
+              selected_side: JSON.parse(options.body).side,
+              confidence: JSON.parse(options.body).confidence,
+              rationale: JSON.parse(options.body).rationale,
+              answer_side: "bull",
+              outcome_pct: 8.4,
+              result: JSON.parse(options.body).side === "bull" ? "correct" : "wrong",
+              created_at: "2026-07-20T00:00:00+00:00",
+              feedback: {
+                summary: "You chose bear with 5/5 confidence. The answer is bull.",
+                probable_causes: ["You may have overweighted the risk narrative."],
+                improvement_steps: ["Rank the clues by specificity."],
+                focus_tags: ["calibration", "evidence"],
+              },
+            }),
+        });
+      }
+
+      if (url === "/api/practice" || url.startsWith("/api/practice?")) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              stats: {
+                total_attempts: 0,
+                accuracy_rate: null,
+                high_confidence_accuracy_rate: null,
+                low_confidence_accuracy_rate: null,
+                most_common_focus: null,
+              },
+              questions: [
+                {
+                  id: "nvda-ai-guidance",
+                  ticker: "NVDA",
+                  title: "AI demand beats valuation anxiety",
+                  as_of: "Training case",
+                  price: 123.45,
+                  currency: "USD",
+                  horizon_days: 7,
+                  scenario: "AI demand and guidance are strong, but valuation anxiety is loud.",
+                  bull_points: ["Guidance is improving.", "Revenue is accelerating."],
+                  bear_points: ["The stock already rallied.", "Expectations are high."],
+                  prompt: "For the next 7 trading days, would you choose bull, bear, or neutral?",
+                  focus_tags: ["evidence quality", "valuation"],
+                },
+              ],
+              recent_attempts: [],
+            }),
+        });
+      }
+
       if (url === "/api/debates/judged") {
         return Promise.resolve({
           ok: true,
@@ -436,6 +494,36 @@ describe("App", () => {
     expect(screen.getByText("NVDA")).toBeInTheDocument();
     expect(screen.getByText("110.00 (+10.00%) 勝")).toBeInTheDocument();
     expect(screen.getByText("待結算")).toBeInTheDocument();
+  });
+
+  it("submits a practice answer and renders feedback", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.click(screen.getByRole("button", { name: "Practice" }));
+
+    expect(await screen.findByText("Judgment Question Bank")).toBeInTheDocument();
+    expect(screen.getByText("NVDA: AI demand beats valuation anxiety")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Bearish" }));
+    fireEvent.change(screen.getByLabelText("Judgment rationale"), {
+      target: { value: "Valuation risk looks too high." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Submit Answer" }));
+
+    expect(await screen.findByText("Needs work")).toBeInTheDocument();
+    expect(screen.getByText("Likely causes")).toBeInTheDocument();
+    expect(screen.getByText("You may have overweighted the risk narrative.")).toBeInTheDocument();
+
+    const practiceCall = global.fetch.mock.calls.find(
+      ([url, options]) => url === "/api/practice/attempts" && options?.method === "POST",
+    );
+    expect(JSON.parse(practiceCall[1].body)).toMatchObject({
+      question_id: "nvda-ai-guidance",
+      side: "bear",
+      confidence: 3,
+      rationale: "Valuation risk looks too high.",
+      language: "en",
+    });
   });
 
   it("saves OpenAI API key and model from the settings page", async () => {

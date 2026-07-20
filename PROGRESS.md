@@ -531,3 +531,34 @@
 - 使用者錄製配音並合成到影片後，上傳為公開 YouTube。
 - 填入 Devpost 的 YouTube URL、`/feedback Session ID`、真實 Country of Residence 與 Submitter Type。
 - 最終投稿前確認 repo URL 使用 `https://github.com/houyehh/FinDebate`，不要使用舊 repo 連結。
+
+## 2026-07-20 新增判斷力練習題庫
+
+### 做了什麼
+- 新增 Practice mode：導覽列加入「練習」，使用者可以像刷題一樣逐題閱讀多空線索、選擇看多/看空/中立、填信心度與判斷理由。
+- 後端新增 `practice_attempts` SQLite 表，記錄題號、使用者方向、信心度、理由、參考答案、7 日結果、回饋 JSON 與時間戳。
+- 新增 `GET /api/practice`：回傳不含答案的題庫、練習統計與最近作答紀錄。
+- 新增 `POST /api/practice/attempts`：送出答案後才揭曉參考方向與 7 日結果，並根據理由文字做回饋分析。
+- 題庫目前內建 5 題訓練案例，涵蓋 NVDA、AAPL、BTC-USD、TSLA、2330.TW；題目內容支援繁中/英文切換。
+- 回饋分析目前不吃 OpenAI quota，使用本機規則檢查：理由是否太短、是否缺少數據錨點、是否沒有處理反方、是否過度自信、是否過度中立或錯抓主導訊號。
+- 前端新增題卡、作答面板、答題後回饋面板、練習統計與最近練習區。
+
+### 關鍵決定
+- 先做本機 deterministic 題庫與規則式回饋，避免黑客松 demo 被 OpenAI quota 或外部資料源卡住。
+- 練習模式不改動原本「兩輪辯論 → 盲判 → 裁判揭曉 → 戰績回測」主流程，只新增一個可反覆訓練的入口。
+- 題目 API 不提前回傳 `answer_side` 或 `outcome_pct`，避免前端在作答前拿到答案。
+- 回饋標籤優先顯示使用者當次答案暴露出的問題，再補題目本身的訓練主題。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：25 passed。
+- `npm.cmd test`：9 passed。
+- `npm.cmd run build`：成功。
+- in-app browser 驗證 `http://127.0.0.1:5184/`：可進入「練習」頁，繁中題目正常顯示，送出作答後會出現「可能原因」與「下一題改進」。
+
+### 遇到的問題
+- 第一次前端頁面驗證時題目內容仍是英文；已改成前端帶 `language` query，後端依語言回傳本地化題目。
+- 手動驗證送出了一筆 NVDA 練習作答，因此本機 `data/app.db` 的練習統計目前會看到 1 次練習紀錄。
+
+### 下一步
+- 後續可把練習紀錄彙整成個人弱點曲線，例如「反方處理不足」「證據密度不足」「高信心錯判」的趨勢。
+- 若 API quota 穩定，可以再加入可選的 LLM 教練模式，但目前預設保留本機規則回饋，確保 demo 穩定。

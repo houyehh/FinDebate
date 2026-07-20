@@ -16,6 +16,13 @@ from app.debate import (
     generate_two_round_debate,
 )
 from app.market_data import TickerLookupError, TickerSnapshot, get_ticker_snapshot
+from app.practice import (
+    PracticeAttemptRecord,
+    PracticeAttemptRequest,
+    PracticeDashboardResponse,
+    get_practice_dashboard,
+    submit_practice_attempt,
+)
 
 app = FastAPI(title="Bull vs Bear Arena API")
 
@@ -187,3 +194,16 @@ def submit_verdict(request: VerdictSubmitRequest) -> VerdictRecord:
 @app.get("/api/records", response_model=ScoreboardResponse)
 def read_records() -> ScoreboardResponse:
     return get_scoreboard()
+
+
+@app.get("/api/practice", response_model=PracticeDashboardResponse)
+def read_practice_dashboard(language: str = "zh-Hant") -> PracticeDashboardResponse:
+    return get_practice_dashboard(language)
+
+
+@app.post("/api/practice/attempts", response_model=PracticeAttemptRecord)
+def create_practice_attempt(request: PracticeAttemptRequest) -> PracticeAttemptRecord:
+    try:
+        return submit_practice_attempt(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
