@@ -4,6 +4,7 @@ from uuid import uuid4
 
 from fastapi.testclient import TestClient
 
+from app import practice
 from app.main import app
 
 
@@ -13,6 +14,7 @@ def _database_file() -> Path:
 
 def test_practice_dashboard_hides_answers(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_PATH", str(_database_file()))
+    monkeypatch.setenv("PRACTICE_DISABLE_RANDOM", "1")
     client = TestClient(app)
 
     response = client.get("/api/practice")
@@ -30,6 +32,7 @@ def test_practice_dashboard_hides_answers(monkeypatch) -> None:
 def test_practice_attempt_persists_feedback_and_updates_stats(monkeypatch) -> None:
     database_file = _database_file()
     monkeypatch.setenv("DATABASE_PATH", str(database_file))
+    monkeypatch.setenv("PRACTICE_DISABLE_RANDOM", "1")
     client = TestClient(app)
 
     response = client.post(
@@ -66,6 +69,7 @@ def test_practice_attempt_persists_feedback_and_updates_stats(monkeypatch) -> No
 
 def test_unknown_practice_question_returns_friendly_error(monkeypatch) -> None:
     monkeypatch.setenv("DATABASE_PATH", str(_database_file()))
+    monkeypatch.setenv("PRACTICE_DISABLE_RANDOM", "1")
     client = TestClient(app)
 
     response = client.post(
@@ -80,3 +84,34 @@ def test_unknown_practice_question_returns_friendly_error(monkeypatch) -> None:
 
     assert response.status_code == 404
     assert "Unknown practice question" in response.json()["detail"]["message"]
+
+
+def test_random_market_question_contains_indicators(monkeypatch) -> None:
+    rows = []
+    for index in range(45):
+        close = 100 + index * 0.6
+        rows.append(
+            {
+                "date": f"2026-06-{index + 1:02d}",
+                "open": close - 0.4,
+                "high": close + 1.1,
+                "low": close - 1.0,
+                "close": close,
+                "volume": 1_000_000 + index * 10_000,
+            }
+        )
+    monkeypatch.setattr(practice, "_history_rows_for_ticker", lambda _ticker: rows)
+    monkeypatch.setattr(practice.random, "choice", lambda _items: "NVDA")
+    monkeypatch.setattr(practice.random, "randint", lambda start, _end: start)
+
+    question = practice.generate_random_market_case("en")
+
+    assert question.id.startswith("market-NVDA-")
+    assert question.market_window
+    assert question.indicator_summary
+    assert question.answer_side in {"bull", "bear", "neutral"}
+    last_point = question.market_window[-1]
+    assert last_point.k is not None
+    assert last_point.d is not None
+    assert last_point.macd is not None
+    assert last_point.macd_signal is not None

@@ -252,14 +252,18 @@ function App() {
     }
   }
 
-  async function fetchPractice({ silent = false } = {}) {
+  async function fetchPractice({ silent = false, refreshRandom = true } = {}) {
     if (!silent) {
       setPracticeState("loading");
     }
     setPracticeError("");
 
     try {
-      const response = await fetch(apiUrl(`/api/practice?language=${encodeURIComponent(language)}`));
+      const response = await fetch(
+        apiUrl(
+          `/api/practice?language=${encodeURIComponent(language)}&refresh_random=${refreshRandom}`,
+        ),
+      );
       const data = await readApiResponse(response, t.practiceFailed);
 
       if (!response.ok) {
@@ -286,7 +290,7 @@ function App() {
       throw new Error(apiErrorMessage(data, t.practiceSubmitFailed));
     }
 
-    await fetchPractice({ silent: true });
+    await fetchPractice({ silent: true, refreshRandom: false });
     return data;
   }
 
@@ -445,17 +449,6 @@ function App() {
               >
                 {t.navPractice}
               </button>
-              <button
-                type="button"
-                onClick={() => setActivePage("settings")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "settings"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
-              >
-                {t.navSettings}
-              </button>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -479,9 +472,18 @@ function App() {
                 EN
               </button>
             </div>
-            <span className="rounded border border-amber-400/40 px-3 py-1 text-sm text-amber-200">
+            <button
+              type="button"
+              onClick={() => setActivePage("settings")}
+              className={`rounded border px-3 py-1 text-sm transition ${
+                activePage === "settings"
+                  ? "border-amber-300 bg-amber-950/30 text-amber-100"
+                  : "border-amber-400/40 text-amber-200 hover:border-amber-300 hover:bg-amber-950/20"
+              }`}
+              title={t.apiStatusButtonTitle}
+            >
               API: {healthLabels[health]}
-            </span>
+            </button>
           </div>
         </div>
       </nav>
@@ -997,6 +999,11 @@ function PracticePage({
     setCurrentIndex((index) => (index + 1) % questions.length);
   }
 
+  function refreshQuestions() {
+    setCurrentIndex(0);
+    onRefresh();
+  }
+
   const stats = data?.stats;
   const recentAttempts = data?.recent_attempts || [];
 
@@ -1010,10 +1017,10 @@ function PracticePage({
         </div>
         <button
           type="button"
-          onClick={onRefresh}
+          onClick={refreshQuestions}
           className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
         >
-          {t.refresh}
+          {t.randomPractice}
         </button>
       </div>
 
@@ -1056,6 +1063,22 @@ function PracticePage({
               </span>
             ))}
           </div>
+
+          {question.indicator_summary?.length ? (
+            <div className="mt-6 grid grid-cols-4 gap-3">
+              {question.indicator_summary.map((item) => (
+                <div key={item} className="rounded border border-zinc-800 bg-zinc-950 p-3 text-xs leading-5 text-zinc-300">
+                  {item}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {question.market_window?.length ? (
+            <div className="mt-6">
+              <MarketIndicatorChart points={question.market_window} t={t} />
+            </div>
+          ) : null}
 
           <div className="mt-7 grid grid-cols-2 gap-5">
             <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
@@ -1231,6 +1254,169 @@ function FeedbackList({ title, items }) {
         ))}
       </ul>
     </div>
+  );
+}
+
+function MarketIndicatorChart({ points, t }) {
+  if (!points?.length) {
+    return null;
+  }
+
+  const width = 860;
+  const height = 500;
+  const left = 54;
+  const right = 18;
+  const top = 18;
+  const panelGap = 18;
+  const priceHeight = 205;
+  const volumeHeight = 72;
+  const kdHeight = 70;
+  const macdHeight = 78;
+  const innerWidth = width - left - right;
+  const priceTop = top;
+  const volumeTop = priceTop + priceHeight + panelGap;
+  const kdTop = volumeTop + volumeHeight + panelGap;
+  const macdTop = kdTop + kdHeight + panelGap;
+  const xStep = innerWidth / Math.max(points.length - 1, 1);
+  const candleWidth = Math.max(4, Math.min(14, xStep * 0.55));
+  const highs = points.map((point) => point.high);
+  const lows = points.map((point) => point.low);
+  const maxPrice = Math.max(...highs);
+  const minPrice = Math.min(...lows);
+  const priceSpan = maxPrice - minPrice || 1;
+  const maxVolume = Math.max(...points.map((point) => point.volume), 1);
+  const macdAbs = Math.max(
+    ...points.flatMap((point) => [
+      Math.abs(point.macd || 0),
+      Math.abs(point.macd_signal || 0),
+      Math.abs(point.macd_hist || 0),
+    ]),
+    0.1,
+  );
+
+  const xAt = (index) => left + index * xStep;
+  const yPrice = (value) => priceTop + priceHeight - ((value - minPrice) / priceSpan) * priceHeight;
+  const yVolume = (value) => volumeTop + volumeHeight - (value / maxVolume) * volumeHeight;
+  const yKD = (value) => kdTop + kdHeight - (value / 100) * kdHeight;
+  const yMacd = (value) => macdTop + macdHeight / 2 - (value / macdAbs) * (macdHeight / 2);
+  const kPath = linePath(points, (point) => point.k, xAt, yKD);
+  const dPath = linePath(points, (point) => point.d, xAt, yKD);
+  const macdPath = linePath(points, (point) => point.macd, xAt, yMacd);
+  const signalPath = linePath(points, (point) => point.macd_signal, xAt, yMacd);
+  const firstDate = points[0].date;
+  const lastDate = points[points.length - 1].date;
+
+  return (
+    <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+      <div className="mb-3 flex items-center justify-between text-xs text-zinc-400">
+        <span>{t.technicalChartTitle}</span>
+        <span>{firstDate} → {lastDate}</span>
+      </div>
+      <svg
+        className="h-[500px] w-full"
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label={t.technicalChartTitle}
+      >
+        <ChartPanelLabel x="10" y={priceTop + 14} label="K" />
+        <ChartPanelLabel x="10" y={volumeTop + 14} label="VOL" />
+        <ChartPanelLabel x="10" y={kdTop + 14} label="KD" />
+        <ChartPanelLabel x="10" y={macdTop + 14} label="MACD" />
+
+        {[priceTop, volumeTop, kdTop, macdTop].map((panelTop) => (
+          <line
+            key={panelTop}
+            x1={left}
+            x2={width - right}
+            y1={panelTop}
+            y2={panelTop}
+            className="stroke-zinc-800"
+          />
+        ))}
+        <line x1={left} x2={width - right} y1={priceTop + priceHeight} y2={priceTop + priceHeight} className="stroke-zinc-800" />
+        <line x1={left} x2={width - right} y1={volumeTop + volumeHeight} y2={volumeTop + volumeHeight} className="stroke-zinc-800" />
+        <line x1={left} x2={width - right} y1={kdTop + kdHeight} y2={kdTop + kdHeight} className="stroke-zinc-800" />
+        <line x1={left} x2={width - right} y1={macdTop + macdHeight / 2} y2={macdTop + macdHeight / 2} className="stroke-zinc-700" />
+
+        <text x={left} y={priceTop + 12} className="fill-zinc-500 text-[11px]">
+          {maxPrice.toFixed(2)}
+        </text>
+        <text x={left} y={priceTop + priceHeight - 5} className="fill-zinc-500 text-[11px]">
+          {minPrice.toFixed(2)}
+        </text>
+        <text x={left} y={volumeTop + 12} className="fill-zinc-500 text-[11px]">
+          {formatCompactVolume(maxVolume)}
+        </text>
+        <text x={left} y={kdTop + 12} className="fill-zinc-500 text-[11px]">100</text>
+        <text x={left} y={kdTop + kdHeight - 5} className="fill-zinc-500 text-[11px]">0</text>
+
+        {points.map((point, index) => {
+          const x = xAt(index);
+          const up = point.close >= point.open;
+          const candleTop = yPrice(Math.max(point.open, point.close));
+          const candleBottom = yPrice(Math.min(point.open, point.close));
+          const candleHeight = Math.max(candleBottom - candleTop, 2);
+          return (
+            <g key={`${point.date}-${index}`}>
+              <line
+                x1={x}
+                x2={x}
+                y1={yPrice(point.high)}
+                y2={yPrice(point.low)}
+                className={up ? "stroke-emerald-300" : "stroke-red-300"}
+                strokeWidth="1.4"
+              />
+              <rect
+                x={x - candleWidth / 2}
+                y={candleTop}
+                width={candleWidth}
+                height={candleHeight}
+                rx="1"
+                className={up ? "fill-emerald-300" : "fill-red-300"}
+              />
+              <rect
+                x={x - candleWidth / 2}
+                y={yVolume(point.volume)}
+                width={candleWidth}
+                height={volumeTop + volumeHeight - yVolume(point.volume)}
+                className={up ? "fill-emerald-500/45" : "fill-red-500/45"}
+              />
+              <rect
+                x={x - candleWidth / 2}
+                y={point.macd_hist >= 0 ? yMacd(point.macd_hist) : yMacd(0)}
+                width={candleWidth}
+                height={Math.max(Math.abs(yMacd(point.macd_hist || 0) - yMacd(0)), 1)}
+                className={point.macd_hist >= 0 ? "fill-emerald-400/50" : "fill-red-400/50"}
+              />
+            </g>
+          );
+        })}
+
+        {kPath ? <path d={kPath} fill="none" className="stroke-amber-300" strokeWidth="2" /> : null}
+        {dPath ? <path d={dPath} fill="none" className="stroke-sky-300" strokeWidth="2" /> : null}
+        {macdPath ? <path d={macdPath} fill="none" className="stroke-emerald-300" strokeWidth="2" /> : null}
+        {signalPath ? <path d={signalPath} fill="none" className="stroke-red-300" strokeWidth="2" /> : null}
+
+        <text x={left} y={height - 5} className="fill-zinc-500 text-[11px]">
+          {firstDate}
+        </text>
+        <text x={width - right - 82} y={height - 5} className="fill-zinc-500 text-[11px]">
+          {lastDate}
+        </text>
+        <text x={width - right - 145} y={kdTop + 12} className="fill-amber-300 text-[11px]">K</text>
+        <text x={width - right - 125} y={kdTop + 12} className="fill-sky-300 text-[11px]">D</text>
+        <text x={width - right - 145} y={macdTop + 12} className="fill-emerald-300 text-[11px]">DIF</text>
+        <text x={width - right - 105} y={macdTop + 12} className="fill-red-300 text-[11px]">Signal</text>
+      </svg>
+    </div>
+  );
+}
+
+function ChartPanelLabel({ x, y, label }) {
+  return (
+    <text x={x} y={y} className="fill-zinc-500 text-[11px] font-semibold">
+      {label}
+    </text>
   );
 }
 
@@ -1543,6 +1729,32 @@ function formatPercent(value, t) {
 
 function formatSignedPercent(value) {
   return `${value > 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
+}
+
+function formatCompactVolume(value) {
+  if (value >= 1_000_000_000) {
+    return `${(value / 1_000_000_000).toFixed(1)}B`;
+  }
+  if (value >= 1_000_000) {
+    return `${(value / 1_000_000).toFixed(1)}M`;
+  }
+  if (value >= 1_000) {
+    return `${(value / 1_000).toFixed(1)}K`;
+  }
+  return String(Math.round(value));
+}
+
+function linePath(points, accessor, xAt, yAt) {
+  return points
+    .map((point, index) => {
+      const value = accessor(point);
+      if (value == null || Number.isNaN(Number(value))) {
+        return "";
+      }
+      return `${index === 0 ? "M" : "L"} ${xAt(index).toFixed(2)} ${yAt(Number(value)).toFixed(2)}`;
+    })
+    .filter(Boolean)
+    .join(" ");
 }
 
 export default App;

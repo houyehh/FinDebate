@@ -143,6 +143,15 @@ def init_db() -> None:
             )
             """
         )
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS practice_questions (
+                question_id TEXT PRIMARY KEY,
+                case_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            )
+            """
+        )
 
 
 def save_verdict(

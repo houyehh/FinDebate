@@ -122,6 +122,42 @@ describe("App", () => {
                   bear_points: ["The stock already rallied.", "Expectations are high."],
                   prompt: "For the next 7 trading days, would you choose bull, bear, or neutral?",
                   focus_tags: ["evidence quality", "valuation"],
+                  indicator_summary: [
+                    "Close 123.45, 5-day move +2.00%.",
+                    "Volume is 1.20x the 5-day average.",
+                    "KD: K=65.0, D=58.0.",
+                    "MACD: DIF=1.200, Signal=0.800, Hist=+0.400.",
+                  ],
+                  market_window: [
+                    {
+                      date: "2026-06-01",
+                      open: 120,
+                      high: 122,
+                      low: 119,
+                      close: 121,
+                      volume: 1000000,
+                      volume_ma5: 950000,
+                      k: 55,
+                      d: 50,
+                      macd: 0.5,
+                      macd_signal: 0.2,
+                      macd_hist: 0.3,
+                    },
+                    {
+                      date: "2026-06-02",
+                      open: 121,
+                      high: 124,
+                      low: 120,
+                      close: 123.45,
+                      volume: 1200000,
+                      volume_ma5: 1000000,
+                      k: 65,
+                      d: 58,
+                      macd: 1.2,
+                      macd_signal: 0.8,
+                      macd_hist: 0.4,
+                    },
+                  ],
                 },
               ],
               recent_attempts: [],
@@ -504,6 +540,7 @@ describe("App", () => {
 
     expect(await screen.findByText("Judgment Question Bank")).toBeInTheDocument();
     expect(screen.getByText("NVDA: AI demand beats valuation anxiety")).toBeInTheDocument();
+    expect(screen.getByText("K-line / Price-Volume / KD / MACD")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Bearish" }));
     fireEvent.change(screen.getByLabelText("Judgment rationale"), {
       target: { value: "Valuation risk looks too high." },
@@ -529,7 +566,7 @@ describe("App", () => {
   it("saves OpenAI API key and model from the settings page", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
+    fireEvent.click(await screen.findByRole("button", { name: "API: ok" }));
 
     expect(await screen.findByText("模型與 API Key")).toBeInTheDocument();
     expect(screen.getAllByText(/尚未設定/).length).toBeGreaterThan(0);
@@ -558,7 +595,7 @@ describe("App", () => {
   it("can switch to demo debate mode without entering an API key", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "設定" }));
+    fireEvent.click(await screen.findByRole("button", { name: "API: ok" }));
     await screen.findByText("模型與 API Key");
     fireEvent.click(screen.getByRole("button", { name: "Demo 模式" }));
     fireEvent.click(screen.getByRole("button", { name: "儲存設定" }));

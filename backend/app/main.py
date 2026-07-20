@@ -197,8 +197,11 @@ def read_records() -> ScoreboardResponse:
 
 
 @app.get("/api/practice", response_model=PracticeDashboardResponse)
-def read_practice_dashboard(language: str = "zh-Hant") -> PracticeDashboardResponse:
-    return get_practice_dashboard(language)
+def read_practice_dashboard(
+    language: str = "zh-Hant",
+    refresh_random: bool = True,
+) -> PracticeDashboardResponse:
+    return get_practice_dashboard(language, refresh_random=refresh_random)
 
 
 @app.post("/api/practice/attempts", response_model=PracticeAttemptRecord)
