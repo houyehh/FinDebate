@@ -238,3 +238,7 @@ Key decisions made during the build:
 ### Built With
 
 Python, FastAPI, React, Vite, Tailwind CSS, SQLite, yfinance, OpenAI API, Codex, GPT-5.6.
+
+## License
+
+MIT License. See [LICENSE](LICENSE).

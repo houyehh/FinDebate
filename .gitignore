@@ -10,3 +10,4 @@ coverage/
 
 data/*.db
 data/*.sqlite
+submission_assets/generated/

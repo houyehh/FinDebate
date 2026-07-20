@@ -1,0 +1,39 @@
+1
+00:00:00,000 --> 00:00:10,000
+Bull vs Bear Arena turns AI market analysis into blind judgment practice.
+
+2
+00:00:10,000 --> 00:00:22,000
+The product reverses the usual AI workflow: decide first, reveal judge scores later.
+
+3
+00:00:22,000 --> 00:00:37,000
+Ticker lookup validates symbols with yfinance and shows a 30-day price line.
+
+4
+00:00:37,000 --> 00:00:55,000
+Bull and Bear each produce three evidence-backed opening claims.
+
+5
+00:00:55,000 --> 00:01:13,000
+Round two adds targeted rebuttals with source URLs, not just opinions.
+
+6
+00:01:13,000 --> 00:01:31,000
+Users submit a blind verdict before evidence, source, and logic scores are revealed.
+
+7
+00:01:31,000 --> 00:01:49,000
+Every verdict is saved and later backtested against real market prices.
+
+8
+00:01:49,000 --> 00:02:04,000
+Demo Mode lets judges test the full workflow even when API quota is unavailable.
+
+9
+00:02:04,000 --> 00:02:22,000
+Codex and GPT-5.6 shaped the full stack, schemas, prompts, tests, and UX decisions.
+
+10
+00:02:22,000 --> 00:02:32,000
+The goal is not trading automation. The goal is better recorded judgment.

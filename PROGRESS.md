@@ -502,3 +502,32 @@
 
 ### 下一步
 - 由使用者確認授權（建議 MIT 或 Apache-2.0）與提供 demo video URL、/feedback Session ID、submitter type、country/category 後，可協助更新 Devpost submission。
+
+## 2026-07-20 投稿素材收尾：License、Demo 影片主檔與填表指南
+
+### 做了什麼
+- 補上 MIT `LICENSE`，並在 README 新增 License 區塊，讓 public repo 符合 Devpost 對「relevant licensing」的要求。
+- 新增 `submission_assets/voiceover_script_zh_tw.md`，提供約 2 分 30 秒的繁中配音逐字稿，涵蓋產品核心流程、盲判機制、戰績回測，以及 Codex/GPT-5.6 的使用方式。
+- 新增 `submission_assets/demo_subtitles_en.srt`，提供英文字幕檔，讓中文配音影片仍有英文翻譯可供評審理解。
+- 新增 `submission_assets/devpost_form_guide.md`，整理 Devpost 欄位、建議填法、可直接貼上的 repo URL、測試說明與最後投稿檢查清單。
+- 產出本機影片主檔 `submission_assets/generated/bull_vs_bear_arena_demo_silent.mp4`，解析度 1920x1080、長度約 2 分 32 秒；此檔為靜音主檔，已加入畫面字幕與節奏切段。
+
+### 關鍵決定
+- 授權選 MIT，原因是簡潔、寬鬆、評審最容易辨識，也適合黑客松公開 repo。
+- 影片先交付靜音主檔與逐字稿，保留使用者本人配音；因 OpenAI Build Week 規則要求 demo video 必須有 audio 說明 Codex 與 GPT-5.6，靜音版不可直接當最終投稿影片。
+- `submission_assets/generated/` 加入 `.gitignore`，避免把大型生成影格和本機 MP4 塞進 repo；保留可版本控制的腳本型/文字型投稿素材。
+
+### 驗收測試
+- 重新查詢 Devpost OpenAI Build Week 提交要求與日期：目前仍為 `submissions_open`，影片必填、網站與 zip 非必填，截止時間為 2026-07-22 00:00 UTC。
+- 使用 FFmpeg 驗證輸出影片：長度約 00:02:32、1920x1080、30 fps、H.264 MP4。
+- 文件-only 與素材-only 變更，未改動前後端功能；下一步 commit 前會跑後端測試與 diff 檢查。
+
+### 遇到的問題
+- HyperFrames doctor 顯示本機缺少 FFmpeg/Chrome headless shell，因此改用暫存目錄的 `ffmpeg-static` 產出可用 MP4。
+- 目前 Devpost project 的 `video_url` 仍為空，且 `/feedback Session ID` 需要使用者從 Codex 回饋流程取得，無法由本機自動推定。
+- 影片目前沒有音軌；使用者錄完配音後，需要合成音軌並上傳公開 YouTube，才能滿足比賽要求。
+
+### 下一步
+- 使用者錄製配音並合成到影片後，上傳為公開 YouTube。
+- 填入 Devpost 的 YouTube URL、`/feedback Session ID`、真實 Country of Residence 與 Submitter Type。
+- 最終投稿前確認 repo URL 使用 `https://github.com/houyehh/FinDebate`，不要使用舊 repo 連結。
