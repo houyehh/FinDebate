@@ -872,9 +872,26 @@ def _fundamental_snapshot(ticker: str, as_of: str | None = None) -> list[Snapsho
     if cutoff and ticker_obj is not None:
         historical_metrics = _historical_financial_snapshot(ticker_obj, cutoff)
         if historical_metrics:
-            return historical_metrics[:6]
+            return [
+                _fundamental_metric(
+                    ticker,
+                    "Point-in-time valuation",
+                    "Unavailable in yfinance",
+                    "Historical PE/PS/PEG are not provided reliably by free yfinance; hidden to avoid future leakage.",
+                    "warn",
+                ),
+                *[_with_fundamental_source(metric, ticker) for metric in historical_metrics],
+            ][:8]
         return [
-            SnapshotMetric(
+            _fundamental_metric(
+                ticker,
+                "Point-in-time valuation",
+                "Unavailable in yfinance",
+                "Historical PE/PS/PEG are not provided reliably by free yfinance; hidden to avoid future leakage.",
+                "warn",
+            ),
+            _fundamental_metric(
+                ticker,
                 label="Historical financials",
                 value="As-of backfill unavailable",
                 detail="Current valuation and revenue ratios are hidden to avoid future leakage.",
@@ -886,36 +903,100 @@ def _fundamental_snapshot(ticker: str, as_of: str | None = None) -> list[Snapsho
     market_cap = _to_float(info.get("marketCap"))
     trailing_pe = _to_float(info.get("trailingPE"))
     forward_pe = _to_float(info.get("forwardPE"))
+    price_to_sales = _to_float(info.get("priceToSalesTrailing12Months"))
+    peg_ratio = _first_float(info.get("pegRatio"), info.get("trailingPegRatio"))
+    trailing_eps = _to_float(info.get("trailingEps"))
+    forward_eps = _to_float(info.get("forwardEps"))
     revenue_growth = _to_float(info.get("revenueGrowth"))
+    gross_margin = _to_float(info.get("grossMargins"))
+    operating_margin = _to_float(info.get("operatingMargins"))
     profit_margin = _to_float(info.get("profitMargins"))
     debt_to_equity = _to_float(info.get("debtToEquity"))
+    current_ratio = _to_float(info.get("currentRatio"))
+    return_on_equity = _to_float(info.get("returnOnEquity"))
     recommendation = info.get("recommendationKey")
+    target_mean_price = _to_float(info.get("targetMeanPrice"))
 
     if market_cap:
-        metrics.append(SnapshotMetric(label="Market cap", value=_compact_number(market_cap), detail="Latest yfinance company profile proxy."))
+        metrics.append(_fundamental_metric(ticker, "Market cap", _compact_number(market_cap), "Latest yfinance company profile proxy."))
     if trailing_pe:
-        metrics.append(SnapshotMetric(label="Trailing PE", value=f"{trailing_pe:.1f}", tone="warn" if trailing_pe > 45 else "neutral"))
+        metrics.append(_fundamental_metric(ticker, "Trailing PE", f"{trailing_pe:.1f}", "Trailing price divided by trailing earnings per share.", _valuation_tone(trailing_pe, high=45)))
     if forward_pe:
-        metrics.append(SnapshotMetric(label="Forward PE", value=f"{forward_pe:.1f}", tone="warn" if forward_pe > 45 else "neutral"))
+        metrics.append(_fundamental_metric(ticker, "Forward PE", f"{forward_pe:.1f}", "Forward price divided by expected earnings per share.", _valuation_tone(forward_pe, high=45)))
+    if price_to_sales:
+        metrics.append(_fundamental_metric(ticker, "Price/Sales", f"{price_to_sales:.1f}", "Trailing price-to-sales ratio from yfinance.", _valuation_tone(price_to_sales, high=15)))
+    if peg_ratio:
+        metrics.append(_fundamental_metric(ticker, "PEG ratio", f"{peg_ratio:.2f}", "PE divided by expected growth; lower is not automatically better.", _valuation_tone(peg_ratio, high=2.5)))
+    if trailing_eps is not None:
+        metrics.append(_fundamental_metric(ticker, "Trailing EPS", f"{trailing_eps:.2f}", "Trailing earnings per share from yfinance.", "bull" if trailing_eps > 0 else "bear"))
+    if forward_eps is not None:
+        metrics.append(_fundamental_metric(ticker, "Forward EPS", f"{forward_eps:.2f}", "Forward earnings per share estimate from yfinance.", "bull" if forward_eps > 0 else "bear"))
     if revenue_growth is not None:
-        metrics.append(SnapshotMetric(label="Revenue growth", value=f"{revenue_growth * 100:+.1f}%", tone=_pct_tone(revenue_growth * 100)))
+        metrics.append(_fundamental_metric(ticker, "Revenue growth", f"{revenue_growth * 100:+.1f}%", "Latest yfinance revenue growth proxy.", _pct_tone(revenue_growth * 100)))
+    if gross_margin is not None:
+        metrics.append(_fundamental_metric(ticker, "Gross margin", f"{gross_margin * 100:.1f}%", "Gross profit divided by revenue.", "bull" if gross_margin > 0.35 else "neutral"))
+    if operating_margin is not None:
+        metrics.append(_fundamental_metric(ticker, "Operating margin", f"{operating_margin * 100:.1f}%", "Operating income divided by revenue.", "bull" if operating_margin > 0.15 else "bear" if operating_margin < 0 else "neutral"))
     if profit_margin is not None:
-        metrics.append(SnapshotMetric(label="Profit margin", value=f"{profit_margin * 100:.1f}%", tone="bull" if profit_margin > 0.15 else "neutral"))
+        metrics.append(_fundamental_metric(ticker, "Profit margin", f"{profit_margin * 100:.1f}%", "Net income divided by revenue.", "bull" if profit_margin > 0.15 else "neutral"))
     if debt_to_equity is not None:
-        metrics.append(SnapshotMetric(label="Debt/equity", value=f"{debt_to_equity:.1f}", tone="warn" if debt_to_equity > 150 else "neutral"))
+        metrics.append(_fundamental_metric(ticker, "Debt/equity", f"{debt_to_equity:.1f}", "Debt-to-equity ratio from yfinance.", "warn" if debt_to_equity > 150 else "neutral"))
+    if current_ratio is not None:
+        metrics.append(_fundamental_metric(ticker, "Current ratio", f"{current_ratio:.2f}", "Current assets divided by current liabilities.", "warn" if current_ratio < 1 else "neutral"))
+    if return_on_equity is not None:
+        metrics.append(_fundamental_metric(ticker, "Return on equity", f"{return_on_equity * 100:.1f}%", "Net income divided by shareholder equity.", "bull" if return_on_equity > 0.15 else "bear" if return_on_equity < 0 else "neutral"))
+    if target_mean_price:
+        metrics.append(_fundamental_metric(ticker, "Analyst target", f"{target_mean_price:.2f}", "Mean analyst target price from yfinance."))
     if isinstance(recommendation, str) and recommendation:
-        metrics.append(SnapshotMetric(label="Analyst proxy", value=recommendation.replace("_", " ").title(), detail="Latest yfinance recommendation key."))
+        metrics.append(_fundamental_metric(ticker, "Analyst proxy", recommendation.replace("_", " ").title(), "Latest yfinance recommendation key."))
 
     if not metrics:
         metrics.append(
-            SnapshotMetric(
+            _fundamental_metric(
+                ticker,
                 label="Fundamental data",
                 value="Not enough data",
                 detail="yfinance did not return enough fundamental fields for this asset.",
                 tone="warn",
             )
         )
-    return metrics[:6]
+    return metrics[:12]
+
+
+def _fundamental_metric(
+    ticker: str,
+    label: str,
+    value: str,
+    detail: str = "",
+    tone: MetricTone = "neutral",
+) -> SnapshotMetric:
+    return SnapshotMetric(
+        label=label,
+        value=value,
+        detail=detail,
+        tone=tone,
+        source_name="Yahoo Finance / yfinance",
+        source_url=_finance_source_url(ticker),
+    )
+
+
+def _with_fundamental_source(metric: SnapshotMetric, ticker: str) -> SnapshotMetric:
+    if metric.source_url:
+        return metric
+    return metric.model_copy(
+        update={
+            "source_name": metric.source_name or "Yahoo Finance / yfinance",
+            "source_url": _finance_source_url(ticker),
+        }
+    )
+
+
+def _valuation_tone(value: float, high: float) -> MetricTone:
+    if value <= 0:
+        return "warn"
+    if value > high:
+        return "warn"
+    return "neutral"
 
 
 def _historical_financial_snapshot(ticker_obj: Any, cutoff: date) -> list[SnapshotMetric]:
@@ -1160,7 +1241,7 @@ def _ai_snapshot(
     score += 1 if (point.macd_hist or 0) > 0 else -1
     score += 1 if volume_ratio > 1.15 and pct20 > 0 else -1 if volume_ratio > 1.15 and pct20 < 0 else 0
     score += 1 if any(metric.tone == "bull" for metric in fundamental) else 0
-    score -= 1 if any(metric.tone == "warn" and metric.label in {"Trailing PE", "Forward PE"} for metric in fundamental) else 0
+    score -= 1 if any(metric.tone == "warn" and metric.label in {"Trailing PE", "Forward PE", "Price/Sales", "PEG ratio"} for metric in fundamental) else 0
     side = "bull" if score >= 2 else "bear" if score <= -2 else "neutral"
     confidence = min(5, max(1, 2 + abs(score)))
 
@@ -1239,10 +1320,20 @@ METRIC_LABEL_ZH = {
     "Market cap": "市值",
     "Trailing PE": "本益比 TTM",
     "Forward PE": "預估本益比",
+    "Price/Sales": "股價營收比",
+    "PEG ratio": "PEG 比率",
+    "Trailing EPS": "近四季 EPS",
+    "Forward EPS": "預估 EPS",
     "Revenue growth": "營收成長",
+    "Gross margin": "毛利率",
+    "Operating margin": "營業利益率",
     "Profit margin": "淨利率",
     "Debt/equity": "負債權益比",
+    "Current ratio": "流動比率",
+    "Return on equity": "股東權益報酬率",
+    "Analyst target": "分析師目標價",
     "Analyst proxy": "分析師傾向",
+    "Point-in-time valuation": "當時估值指標",
     "Fundamental data": "基本面資料",
     "Historical financials": "歷史財務資料",
     "Financial period": "財報期間",
@@ -1266,6 +1357,7 @@ METRIC_LABEL_ZH = {
 METRIC_VALUE_ZH = {
     "Not enough data": "資料不足",
     "As-of backfill unavailable": "當時資料回補不可用",
+    "Unavailable in yfinance": "yfinance 無可靠資料",
     "No yfinance news available before the cutoff": "該日期前沒有 yfinance 可用新聞",
     "No as-of headline available": "沒有當時可用新聞標題",
     "Volume confirms move": "量能確認走勢",
@@ -1279,7 +1371,21 @@ METRIC_DETAIL_ZH = {
     "Over 70 can be crowded; under 40 can be weak.": "高於 70 可能偏擁擠，低於 40 可能偏弱。",
     "Daily close-to-close volatility proxy.": "以每日收盤變化估算的波動代理值。",
     "Latest yfinance company profile proxy.": "最新 yfinance 公司資料代理值。",
+    "Trailing price divided by trailing earnings per share.": "目前價格除以近四季每股盈餘。",
+    "Forward price divided by expected earnings per share.": "目前價格除以預估每股盈餘。",
+    "Trailing price-to-sales ratio from yfinance.": "yfinance 回傳的近四季股價營收比。",
+    "PE divided by expected growth; lower is not automatically better.": "本益比除以預期成長率；較低不必然代表低估。",
+    "Trailing earnings per share from yfinance.": "yfinance 回傳的近四季每股盈餘。",
+    "Forward earnings per share estimate from yfinance.": "yfinance 回傳的預估每股盈餘。",
+    "Latest yfinance revenue growth proxy.": "最新 yfinance 營收成長代理值。",
+    "Gross profit divided by revenue.": "毛利除以營收。",
+    "Operating income divided by revenue.": "營業利益除以營收。",
     "Latest yfinance recommendation key.": "最新 yfinance 分析師建議代理值。",
+    "Mean analyst target price from yfinance.": "yfinance 回傳的分析師平均目標價。",
+    "Debt-to-equity ratio from yfinance.": "yfinance 回傳的負債權益比。",
+    "Current assets divided by current liabilities.": "流動資產除以流動負債。",
+    "Net income divided by shareholder equity.": "淨利除以股東權益。",
+    "Historical PE/PS/PEG are not provided reliably by free yfinance; hidden to avoid future leakage.": "免費 yfinance 沒有可靠的歷史 PE/PS/PEG；為避免未來資訊洩漏，本題隱藏這些估值倍率。",
     "yfinance did not return enough fundamental fields for this asset.": "yfinance 對此標的沒有回傳足夠基本面欄位。",
     "Current valuation and revenue ratios are hidden to avoid future leakage.": "為避免未來資訊洩漏，已隱藏目前估值與營收比率。",
     "Latest quarterly financial period ending before the question cutoff; filing lag is approximated.": "題目截止日前最近一期季度財報；申報延遲以近似方式處理。",
@@ -2244,6 +2350,14 @@ def _to_float(value: Any) -> float | None:
     if math.isnan(number) or math.isinf(number):
         return None
     return number
+
+
+def _first_float(*values: Any) -> float | None:
+    for value in values:
+        number = _to_float(value)
+        if number is not None:
+            return number
+    return None
 
 
 def _optional_number(value: float | None, digits: int = 2, signed: bool = False) -> str:

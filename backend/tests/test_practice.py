@@ -297,5 +297,38 @@ def test_fundamental_snapshot_hides_latest_ratios_without_asof_backfill(monkeypa
     text = " ".join(f"{metric.label} {metric.value} {metric.detail}" for metric in metrics)
 
     assert "Historical financials" in text
+    assert "Point-in-time valuation" in text
     assert "999.00B" not in text
     assert "88" not in text
+
+
+def test_fundamental_snapshot_includes_live_valuation_ratios(monkeypatch) -> None:
+    class FakeTicker:
+        info = {
+            "marketCap": 500_000_000_000,
+            "trailingPE": 32.4,
+            "forwardPE": 28.1,
+            "priceToSalesTrailing12Months": 12.2,
+            "pegRatio": 1.7,
+            "trailingEps": 4.56,
+            "forwardEps": 5.25,
+            "grossMargins": 0.68,
+            "operatingMargins": 0.31,
+            "profitMargins": 0.24,
+            "debtToEquity": 45.0,
+            "currentRatio": 1.8,
+            "returnOnEquity": 0.29,
+        }
+
+    monkeypatch.setattr(practice.yf, "Ticker", lambda _ticker: FakeTicker())
+
+    metrics = practice._fundamental_snapshot("SMALL")
+    labels = {metric.label: metric for metric in metrics}
+
+    assert labels["Trailing PE"].value == "32.4"
+    assert labels["Forward PE"].value == "28.1"
+    assert labels["Price/Sales"].value == "12.2"
+    assert labels["PEG ratio"].value == "1.70"
+    assert labels["Trailing EPS"].value == "4.56"
+    assert labels["Gross margin"].value == "68.0%"
+    assert labels["Trailing PE"].source_url.endswith("/quote/SMALL/")

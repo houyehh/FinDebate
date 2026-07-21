@@ -1,5 +1,31 @@
 # 開發進度
 
+## 2026-07-21 基本面估值指標補強
+
+### 做了什麼
+- 即時基本面擴充估值、獲利與流動性欄位：Market cap、Trailing PE、Forward PE、Price/Sales、PEG、Trailing EPS、Forward EPS、Revenue growth、Gross margin、Operating margin、Profit margin、Debt/equity、Current ratio、ROE、Analyst target/proxy。
+- 每個即時基本面指標都帶 Yahoo Finance / yfinance 來源連結，Evidence Pack 也會沿用來源。
+- Practice 歷史題新增「Point-in-time valuation」提示；若免費 yfinance 沒有可靠歷史 PE/PS/PEG，不會偷用今天的估值資料，以避免未來資訊洩漏。
+- AI 教練的基本面風險判斷也納入 Price/Sales 與 PEG 過高的 warn 訊號。
+- 補上繁中欄位翻譯與基本面說明，例如本益比 TTM、預估本益比、股價營收比、PEG、毛利率、營業利益率、流動比率等。
+
+### 關鍵決定
+- Live Analysis 可以使用最新 yfinance valuation ratios；Practice 歷史題必須維持 point-in-time 原則，沒有可靠歷史估值就明確標示不可用。
+- 不為了畫面完整而捏造 PE 或用現在資料回填過去題目，因為這會破壞產品的訓練可信度。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m py_compile backend\app\practice.py backend\app\live_analysis.py` 通過。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests\test_practice.py backend\tests\test_live_analysis.py -q` 通過：14 passed。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q` 通過：37 passed。
+- `npm.cmd test -- --run` 通過：13 passed。
+- `npm.cmd run build` 通過。
+
+### 遇到問題
+- `_to_float` 原本只接受單一值，PEG 需要在 `pegRatio` 與 `trailingPegRatio` 中取第一個有效數字，因此新增 `_first_float` helper。
+
+### 下一步
+- 可再把基本面面板分成「估值 / 獲利 / 財務體質」三個小群組，讓資訊更像專業研究工作台。
+
 ## 2026-07-21 Home/Review Center 重構與真實新聞來源
 
 ### 做了什麼

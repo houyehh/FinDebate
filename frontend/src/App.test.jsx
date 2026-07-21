@@ -228,6 +228,8 @@ const practiceQuestion = {
     { label: "Bollinger", value: "87% band", detail: "Close location relative to 20D bands.", tone: "warn" },
   ],
   fundamental_snapshot: [
+    { label: "Trailing PE", value: "32.5", detail: "Trailing price divided by trailing earnings per share.", tone: "neutral" },
+    { label: "Price/Sales", value: "12.2", detail: "Trailing price-to-sales ratio from yfinance.", tone: "neutral" },
     { label: "Revenue growth", value: "+10.0%", detail: "Latest proxy.", tone: "bull" },
   ],
   news_snapshot: [
@@ -1065,6 +1067,8 @@ describe("App", () => {
     expect(screen.getByText("Read chart → Check evidence → Audit AI → Answer")).toBeInTheDocument();
     expect(screen.getAllByText("Technical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Fundamental").length).toBeGreaterThan(0);
+    expect(screen.getByText("Trailing PE")).toBeInTheDocument();
+    expect(screen.getByText("32.5")).toBeInTheDocument();
     expect(screen.queryByText("Price-volume proxy")).not.toBeInTheDocument();
     expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(screen.getAllByText("Bollinger Bands").length).toBeGreaterThan(0);
