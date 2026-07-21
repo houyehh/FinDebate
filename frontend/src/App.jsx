@@ -244,7 +244,7 @@ function App() {
   }, [activePage, language]);
 
   useEffect(() => {
-    if (activePage !== "home") {
+    if (activePage !== "live") {
       return undefined;
     }
 
@@ -263,7 +263,7 @@ function App() {
   }, [ticker, activePage]);
 
   useEffect(() => {
-    if (activePage === "home" && snapshot?.ticker && liveAnalysis) {
+    if (activePage === "live" && snapshot?.ticker && liveAnalysis) {
       fetchLiveAnalysis(snapshot.ticker);
     }
   }, [language, activePage]);
@@ -804,10 +804,14 @@ function App() {
               <button
                 type="button"
                 onClick={() => {
-                  setActivePage("home");
+                  setActivePage("live");
                   window.setTimeout(() => document.getElementById("ticker-input")?.focus(), 0);
                 }}
-                className="rounded px-3 py-1 text-sm text-zinc-400 transition hover:text-zinc-100"
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "live"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
               >
                 {t.navLiveAnalysis}
               </button>
@@ -873,40 +877,232 @@ function App() {
       </nav>
 
       {activePage === "home" ? (
-        <>
-      <section className="mx-auto grid max-w-6xl grid-cols-[1.05fr_0.95fr] gap-8 px-8 py-12">
-        <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 p-7">
-          <p className="text-sm uppercase text-amber-200">{t.tickerLookup}</p>
-          <h1 className="mt-3 text-4xl font-semibold">{t.appTitle}</h1>
-          <p className="mt-4 text-sm leading-6 text-zinc-400">{t.homeSubtitle}</p>
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => setActivePage("practice")}
-              className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
-            >
-              {t.startPracticeCta}
-            </button>
-            <button
-              type="button"
-              onClick={() => document.getElementById("ticker-input")?.focus()}
-              className="rounded border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-emerald-300 hover:text-emerald-200"
-            >
-              {t.currentAnalysisCta}
-            </button>
-          </div>
+        <HomePage
+          onStartPractice={() => setActivePage("practice")}
+          onStartLive={() => {
+            setActivePage("live");
+            window.setTimeout(() => document.getElementById("ticker-input")?.focus(), 0);
+          }}
+          onOpenReview={() => setActivePage("records")}
+          t={t}
+        />
+      ) : activePage === "live" ? (
+        <LiveAnalysisPage
+          ticker={ticker}
+          setTicker={setTicker}
+          tickerSuggestions={tickerSuggestions}
+          tickerSuggestionState={tickerSuggestionState}
+          showTickerSuggestions={showTickerSuggestions}
+          setShowTickerSuggestions={setShowTickerSuggestions}
+          selectTickerSuggestion={selectTickerSuggestion}
+          lookupState={lookupState}
+          error={error}
+          snapshot={snapshot}
+          liveAnalysis={liveAnalysis}
+          liveState={liveState}
+          liveError={liveError}
+          liveSide={liveSide}
+          setLiveSide={setLiveSide}
+          liveConfidence={liveConfidence}
+          setLiveConfidence={setLiveConfidence}
+          liveRationale={liveRationale}
+          setLiveRationale={setLiveRationale}
+          liveDecisionState={liveDecisionState}
+          liveDecisionError={liveDecisionError}
+          liveDecisionSaved={liveDecisionSaved}
+          debate={debate}
+          debateState={debateState}
+          debateError={debateError}
+          handleSubmit={handleSubmit}
+          fetchLiveAnalysis={fetchLiveAnalysis}
+          handleSubmitLiveDecision={handleSubmitLiveDecision}
+          handleStartDebate={handleStartDebate}
+          language={language}
+          t={t}
+        />
+      ) : activePage === "records" ? (
+        <RecordsPage
+          state={recordsState}
+          data={recordsData}
+          error={recordsError}
+          practiceData={practiceData}
+          practiceState={practiceState}
+          onUpdateRecord={updateVerdictRecord}
+          onDeleteRecord={deleteVerdictRecord}
+          onUpdatePracticeAttempt={updatePracticeAttempt}
+          onDeletePracticeAttempt={deletePracticeAttempt}
+          onRefresh={() => {
+            fetchRecords();
+            fetchPractice({ silent: true, refreshRandom: false });
+          }}
+          t={t}
+        />
+      ) : activePage === "portfolio" ? (
+        <PortfolioPage
+          state={portfolioState}
+          data={portfolioData}
+          error={portfolioError}
+          onRefresh={fetchPortfolio}
+          onCreate={createPortfolioDecision}
+          onUpdate={updatePortfolioDecision}
+          onDelete={deletePortfolioDecision}
+          language={language}
+          t={t}
+        />
+      ) : activePage === "practice" ? (
+        <PracticePage
+          state={practiceState}
+          data={practiceData}
+          error={practiceError}
+          language={language}
+          onRefresh={fetchPractice}
+          onSubmitAttempt={handleSubmitPracticeAttempt}
+          t={t}
+        />
+      ) : (
+        <OpenAISettingsPage
+          state={settingsState}
+          settings={openAISettings}
+          apiKey={settingsApiKey}
+          setApiKey={setSettingsApiKey}
+          model={settingsModel}
+          setModel={setSettingsModel}
+          keySource={settingsKeySource}
+          setKeySource={setSettingsKeySource}
+          debateMode={settingsDebateMode}
+          setDebateMode={setSettingsDebateMode}
+          error={settingsError}
+          saved={settingsSaved}
+          onSubmit={handleSubmitOpenAISettings}
+          onRefresh={fetchOpenAISettings}
+          t={t}
+        />
+      )}
+    </main>
+  );
+}
 
-          <div className="mt-6 rounded border border-zinc-800 bg-zinc-950 p-4">
-            <p className="text-xs uppercase text-zinc-500">{t.trainingLoopTitle}</p>
-            <div className="mt-3 grid grid-cols-5 gap-2 text-center text-xs text-zinc-300">
-              {t.trainingLoopSteps.map((step, index) => (
-                <div key={step} className="rounded border border-zinc-800 bg-zinc-900 px-2 py-2">
-                  <span className="mr-1 text-amber-200">{index + 1}</span>
-                  {step}
-                </div>
-              ))}
+function HomePage({ onStartPractice, onStartLive, onOpenReview, t }) {
+  const journeys = [
+    {
+      title: t.homePracticeTitle,
+      body: t.homePracticeBody,
+      action: t.startPracticeCta,
+      onClick: onStartPractice,
+      accent: "text-amber-200",
+    },
+    {
+      title: t.homeLiveTitle,
+      body: t.homeLiveBody,
+      action: t.currentAnalysisCta,
+      onClick: onStartLive,
+      accent: "text-emerald-200",
+    },
+    {
+      title: t.homeReviewTitle,
+      body: t.homeReviewBody,
+      action: t.openReviewCta,
+      onClick: onOpenReview,
+      accent: "text-sky-200",
+    },
+  ];
+
+  return (
+    <section className="mx-auto max-w-6xl px-8 py-12">
+      <div className="border-y border-zinc-800 py-12">
+        <p className="text-sm uppercase text-amber-200">{t.homeKicker}</p>
+        <h1 className="mt-4 max-w-4xl text-5xl font-semibold leading-tight text-zinc-50">{t.appTitle}</h1>
+        <p className="mt-5 max-w-3xl text-base leading-7 text-zinc-400">{t.homeSubtitle}</p>
+        <div className="mt-8 flex flex-wrap gap-3">
+          <button
+            type="button"
+            onClick={onStartPractice}
+            className="rounded bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
+          >
+            {t.startPracticeCta}
+          </button>
+          <button
+            type="button"
+            onClick={onStartLive}
+            className="rounded border border-emerald-300/60 px-5 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-950/30"
+          >
+            {t.currentAnalysisCta}
+          </button>
+        </div>
+      </div>
+
+      <div className="mt-10 grid grid-cols-3 gap-5">
+        {journeys.map((item, index) => (
+          <article key={item.title} className="border border-zinc-800 bg-zinc-900 p-5">
+            <p className={`text-sm font-semibold ${item.accent}`}>0{index + 1}</p>
+            <h2 className="mt-3 text-xl font-semibold text-zinc-100">{item.title}</h2>
+            <p className="mt-3 min-h-24 text-sm leading-6 text-zinc-400">{item.body}</p>
+            <button
+              type="button"
+              onClick={item.onClick}
+              className="mt-5 rounded border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+            >
+              {item.action}
+            </button>
+          </article>
+        ))}
+      </div>
+
+      <div className="mt-8 border border-zinc-800 bg-zinc-950 p-5">
+        <p className="text-xs uppercase text-zinc-500">{t.trainingLoopTitle}</p>
+        <div className="mt-4 grid grid-cols-5 gap-2 text-center text-xs text-zinc-300">
+          {t.trainingLoopSteps.map((step, index) => (
+            <div key={step} className="border border-zinc-800 bg-zinc-900 px-2 py-3">
+              <span className="mr-1 text-amber-200">{index + 1}</span>
+              {step}
             </div>
-          </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function LiveAnalysisPage({
+  ticker,
+  setTicker,
+  tickerSuggestions,
+  tickerSuggestionState,
+  showTickerSuggestions,
+  setShowTickerSuggestions,
+  selectTickerSuggestion,
+  lookupState,
+  error,
+  snapshot,
+  liveAnalysis,
+  liveState,
+  liveError,
+  liveSide,
+  setLiveSide,
+  liveConfidence,
+  setLiveConfidence,
+  liveRationale,
+  setLiveRationale,
+  liveDecisionState,
+  liveDecisionError,
+  liveDecisionSaved,
+  debate,
+  debateState,
+  debateError,
+  handleSubmit,
+  fetchLiveAnalysis,
+  handleSubmitLiveDecision,
+  handleStartDebate,
+  language,
+  t,
+}) {
+  return (
+    <>
+      <section className="mx-auto grid max-w-6xl grid-cols-[1.05fr_0.95fr] gap-8 px-8 py-12">
+        <div className="min-w-0 border border-zinc-800 bg-zinc-900 p-7">
+          <p className="text-sm uppercase text-emerald-200">{t.liveAnalysisKicker}</p>
+          <h1 className="mt-3 text-4xl font-semibold">{t.liveAnalysisHomeTitle}</h1>
+          <p className="mt-4 text-sm leading-6 text-zinc-400">{t.liveAnalysisHomeSubtitle}</p>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-zinc-300" htmlFor="ticker-input">
@@ -986,7 +1182,7 @@ function App() {
           ) : null}
         </div>
 
-        <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 p-7">
+        <div className="min-w-0 border border-zinc-800 bg-zinc-900 p-7">
           {snapshot ? (
             <>
               <div className="flex items-start justify-between gap-6">
@@ -1016,7 +1212,7 @@ function App() {
               </div>
             </>
           ) : (
-            <div className="flex h-full min-h-80 items-center justify-center rounded border border-dashed border-zinc-700 text-zinc-400">
+            <div className="flex h-full min-h-80 items-center justify-center border border-dashed border-zinc-700 text-zinc-400">
               {t.chartPlaceholder}
             </div>
           )}
@@ -1060,66 +1256,7 @@ function App() {
           t={t}
         />
       ) : null}
-        </>
-      ) : activePage === "records" ? (
-        <RecordsPage
-          state={recordsState}
-          data={recordsData}
-          error={recordsError}
-          practiceData={practiceData}
-          practiceState={practiceState}
-          onUpdateRecord={updateVerdictRecord}
-          onDeleteRecord={deleteVerdictRecord}
-          onUpdatePracticeAttempt={updatePracticeAttempt}
-          onDeletePracticeAttempt={deletePracticeAttempt}
-          onRefresh={() => {
-            fetchRecords();
-            fetchPractice({ silent: true, refreshRandom: false });
-          }}
-          t={t}
-        />
-      ) : activePage === "portfolio" ? (
-        <PortfolioPage
-          state={portfolioState}
-          data={portfolioData}
-          error={portfolioError}
-          onRefresh={fetchPortfolio}
-          onCreate={createPortfolioDecision}
-          onUpdate={updatePortfolioDecision}
-          onDelete={deletePortfolioDecision}
-          language={language}
-          t={t}
-        />
-      ) : activePage === "practice" ? (
-        <PracticePage
-          state={practiceState}
-          data={practiceData}
-          error={practiceError}
-          language={language}
-          onRefresh={fetchPractice}
-          onSubmitAttempt={handleSubmitPracticeAttempt}
-          t={t}
-        />
-      ) : (
-        <OpenAISettingsPage
-          state={settingsState}
-          settings={openAISettings}
-          apiKey={settingsApiKey}
-          setApiKey={setSettingsApiKey}
-          model={settingsModel}
-          setModel={setSettingsModel}
-          keySource={settingsKeySource}
-          setKeySource={setSettingsKeySource}
-          debateMode={settingsDebateMode}
-          setDebateMode={setSettingsDebateMode}
-          error={settingsError}
-          saved={settingsSaved}
-          onSubmit={handleSubmitOpenAISettings}
-          onRefresh={fetchOpenAISettings}
-          t={t}
-        />
-      )}
-    </main>
+    </>
   );
 }
 
@@ -1990,7 +2127,7 @@ function EvidenceTabs({ activeTab, setActiveTab, question, t }) {
           <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
         ) : null}
         {activeTab === "news" ? (
-          <MetricPanel title={t.newsDimension} metrics={question.news_snapshot || []} />
+          <NewsPanel metrics={question.news_snapshot || []} t={t} />
         ) : null}
         {activeTab === "ai" ? <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} /> : null}
         {activeTab === "evidence" ? <EvidencePackPanel evidence={question.evidence_pack || []} t={t} /> : null}
@@ -2014,12 +2151,67 @@ function MetricPanel({ title, metrics }) {
                 </span>
               </div>
               {metric.detail ? <p className="mt-2 text-xs leading-5 text-zinc-400">{metric.detail}</p> : null}
+              {metric.source_url ? (
+                <a
+                  className="mt-3 inline-block break-all text-xs text-amber-200 underline-offset-4 hover:underline"
+                  href={metric.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {metric.source_name || metric.source_url}
+                </a>
+              ) : null}
             </div>
           ))}
         </div>
       ) : (
         <p className="mt-3 text-sm text-zinc-500">No data</p>
       )}
+    </div>
+  );
+}
+
+function NewsPanel({ metrics, t }) {
+  if (!metrics?.length) {
+    return <MetricPanel title={t.newsDimension} metrics={[]} />;
+  }
+
+  return (
+    <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+      <h3 className="font-semibold text-zinc-100">{t.newsDimension}</h3>
+      <div className="mt-3 space-y-3">
+        {metrics.map((metric, index) => (
+          <article key={`${metric.label}-${metric.value}-${index}`} className="border border-zinc-800 bg-zinc-900 p-4">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs text-zinc-500">{metric.label}</p>
+                <h4 className="mt-1 text-sm font-semibold leading-5 text-zinc-100">{metric.value}</h4>
+              </div>
+              {metric.published_at ? (
+                <span className={`shrink-0 text-xs font-semibold ${metricToneClass(metric.tone)}`}>
+                  {metric.published_at}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-3 text-xs leading-5 text-zinc-400">
+              {metric.summary || metric.detail || t.newsSummaryUnavailable}
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs">
+              {metric.source_name ? <span className="text-zinc-500">{t.newsSource}: {metric.source_name}</span> : null}
+              {metric.source_url ? (
+                <a
+                  className="break-all text-amber-200 underline-offset-4 hover:underline"
+                  href={metric.source_url}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {t.readOriginal}
+                </a>
+              ) : null}
+            </div>
+          </article>
+        ))}
+      </div>
     </div>
   );
 }
@@ -2097,6 +2289,16 @@ function EvidencePackPanel({ evidence, t }) {
               <span className={`text-xs font-semibold ${metricToneClass(item.tone)}`}>{item.value}</span>
             </div>
             {item.detail ? <p className="mt-2 text-xs leading-5 text-zinc-400">{item.detail}</p> : null}
+            {item.source_url ? (
+              <a
+                className="mt-3 inline-block break-all text-xs text-amber-200 underline-offset-4 hover:underline"
+                href={item.source_url}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {item.source_name || item.source_url}
+              </a>
+            ) : null}
           </article>
         ))}
       </div>
@@ -3220,6 +3422,7 @@ function RecordsPage({
   const [recordForm, setRecordForm] = useState(null);
   const [editingAttemptId, setEditingAttemptId] = useState(null);
   const [attemptForm, setAttemptForm] = useState(null);
+  const [activeReviewTab, setActiveReviewTab] = useState("practice");
   const [actionState, setActionState] = useState("idle");
   const [actionError, setActionError] = useState("");
 
@@ -3340,8 +3543,9 @@ function RecordsPage({
     <section className="mx-auto max-w-6xl px-8 py-12">
       <div className="flex items-start justify-between gap-8">
         <div>
-          <p className="text-sm uppercase text-amber-200">{t.scoreboard}</p>
-          <h1 className="mt-2 text-4xl font-semibold">{t.recordsTitle}</h1>
+          <p className="text-sm uppercase text-amber-200">{t.reviewCenterKicker}</p>
+          <h1 className="mt-2 text-4xl font-semibold">{t.reviewCenterTitle}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">{t.reviewCenterLead}</p>
         </div>
         <button
           type="button"
@@ -3352,7 +3556,32 @@ function RecordsPage({
         </button>
       </div>
 
-      {stats ? (
+      <div className="mt-8 flex gap-2 border-b border-zinc-800 pb-3">
+        <button
+          type="button"
+          onClick={() => setActiveReviewTab("practice")}
+          className={`rounded px-4 py-2 text-sm font-semibold transition ${
+            activeReviewTab === "practice"
+              ? "bg-amber-300 text-zinc-950"
+              : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+          }`}
+        >
+          {t.practiceReviewTab}
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveReviewTab("live")}
+          className={`rounded px-4 py-2 text-sm font-semibold transition ${
+            activeReviewTab === "live"
+              ? "bg-amber-300 text-zinc-950"
+              : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+          }`}
+        >
+          {t.liveReviewTab}
+        </button>
+      </div>
+
+      {activeReviewTab === "live" && stats ? (
         <div className="mt-8 grid grid-cols-4 gap-4">
           <StatBox label={t.totalVerdicts} value={stats.total_verdicts} />
           <StatBox label={t.winRate7d} value={formatPercent(stats.win_rate_7d, t)} />
@@ -3368,12 +3597,22 @@ function RecordsPage({
         </div>
       ) : null}
 
+      {activeReviewTab === "practice" && practiceStats ? (
+        <div className="mt-8 grid grid-cols-4 gap-4">
+          <StatBox label={t.practiceTotalAttempts} value={practiceStats.total_attempts} />
+          <StatBox label={t.practiceAccuracy} value={formatPercent(practiceStats.accuracy_rate, t)} />
+          <StatBox label={t.practiceHighConfidenceAccuracy} value={formatPercent(practiceStats.high_confidence_accuracy_rate, t)} />
+          <StatBox label={t.practiceMostCommonFocus} value={practiceStats.most_common_focus || t.unavailable} />
+        </div>
+      ) : null}
+
       {actionError ? (
         <div className="mt-5 rounded border border-red-400/40 bg-red-950/40 p-4 text-sm text-red-100">
           {actionError}
         </div>
       ) : null}
 
+      {activeReviewTab === "live" ? (
       <div className="mt-8 overflow-hidden rounded-lg border border-zinc-800">
         <table className="w-full border-collapse bg-zinc-900 text-left text-sm">
           <thead className="bg-zinc-950 text-zinc-400">
@@ -3443,20 +3682,16 @@ function RecordsPage({
           <div className="bg-zinc-900 p-8 text-center text-zinc-400">{t.noRecords}</div>
         ) : null}
       </div>
+      ) : null}
 
-      <section className="mt-10 border-t border-zinc-800 pt-8">
+      {activeReviewTab === "practice" ? (
+      <section className="mt-8">
         <div className="flex items-start justify-between gap-8">
           <div>
             <p className="text-sm uppercase text-amber-200">{t.practiceKicker}</p>
             <h2 className="mt-2 text-3xl font-semibold">{t.practiceAttemptRecords}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">{t.practiceReviewLead}</p>
           </div>
-          {practiceStats ? (
-            <div className="grid grid-cols-3 gap-3 text-sm">
-              <StatBox label={t.practiceTotalAttempts} value={practiceStats.total_attempts} />
-              <StatBox label={t.practiceAccuracy} value={formatPercent(practiceStats.accuracy_rate, t)} />
-              <StatBox label={t.practiceMostCommonFocus} value={practiceStats.most_common_focus || t.unavailable} />
-            </div>
-          ) : null}
         </div>
 
         {practiceState === "loading" && !practiceData ? (
@@ -3535,6 +3770,7 @@ function RecordsPage({
           ) : null}
         </div>
       </section>
+      ) : null}
     </section>
   );
 }

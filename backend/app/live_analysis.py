@@ -25,6 +25,7 @@ from app.practice import (
     _technical_snapshot,
     build_ai_debate,
     build_evidence_pack,
+    localized_snapshot_metrics,
     localized_ai_snapshot,
 )
 
@@ -141,8 +142,20 @@ def get_live_analysis(raw_ticker: str, language: str = "zh-Hant") -> LiveAnalysi
     chip = _chip_snapshot(point, window)
     ai = _ai_snapshot(snapshot.ticker, point, window, technical, fundamental, chip)
     ai = localized_ai_snapshot(snapshot.ticker, point, window, ai, language)
+    technical = localized_snapshot_metrics(technical, language)
+    fundamental = localized_snapshot_metrics(fundamental, language)
+    news = localized_snapshot_metrics(news, language)
+    chip = localized_snapshot_metrics(chip, language)
     bull_points, bear_points = _factor_clues(point, window, ai, language.startswith("zh"))
-    evidence_pack = build_evidence_pack(snapshot.ticker, technical, fundamental, news, chip, ai)
+    evidence_pack = build_evidence_pack(
+        snapshot.ticker,
+        technical,
+        fundamental,
+        news,
+        chip,
+        ai,
+        zh=language.startswith("zh"),
+    )
     ai_debate = build_ai_debate(
         snapshot.ticker,
         evidence_pack,
@@ -396,12 +409,12 @@ def _source_summary(language: str) -> str:
     if language.startswith("zh"):
         return (
             "市場資料來自 Yahoo Finance/yfinance；基本面使用最新公司 profile 與估值欄位，"
-            "新聞/題材使用 yfinance 回傳的近期新聞與公司描述。AI 面是 deterministic coach，"
+            "新聞/題材使用 yfinance 回傳的近期新聞、原始連結與公司描述。AI 面是 deterministic coach，"
             "只根據同一份技術、基本、新聞/題材資料產生。"
         )
     return (
         "Market data comes from Yahoo Finance/yfinance; fundamentals use the latest company profile and "
-        "valuation fields, news/theme uses recent yfinance news and company descriptions, and the AI view is "
+        "valuation fields, news/theme uses recent yfinance news with original URLs plus company descriptions, and the AI view is "
         "a deterministic coach generated from the same technical, fundamental, and news/theme snapshots."
     )
 

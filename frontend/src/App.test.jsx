@@ -231,8 +231,24 @@ const practiceQuestion = {
     { label: "Revenue growth", value: "+10.0%", detail: "Latest proxy.", tone: "bull" },
   ],
   news_snapshot: [
-    { label: "Business lane", value: "Semiconductors / AI infrastructure", detail: "Latest profile.", tone: "neutral" },
-    { label: "As-of news", value: "AI demand remains a key theme", detail: "Demo News", tone: "neutral" },
+    {
+      label: "Business lane",
+      value: "Semiconductors / AI infrastructure",
+      detail: "Latest profile.",
+      tone: "neutral",
+      source_name: "Yahoo Finance / yfinance",
+      source_url: "https://finance.yahoo.com/quote/NVDA/",
+    },
+    {
+      label: "As-of news",
+      value: "AI demand remains a key theme",
+      detail: "Demo News · 2026-06-02",
+      tone: "neutral",
+      source_name: "Demo News",
+      source_url: "https://example.com/news/nvda-ai-demand",
+      published_at: "2026-06-02",
+      summary: "AI accelerator demand remains the main market theme around the company.",
+    },
   ],
   chip_snapshot: [
     { label: "Volume / 20D avg", value: "1.20x", detail: "Price-volume read.", tone: "neutral" },
@@ -298,8 +314,8 @@ const liveAnalysis = {
   ai_debate: aiDebate,
   bull_points: practiceQuestion.bull_points,
   bear_points: practiceQuestion.bear_points,
-  data_note: "Live analysis uses latest available yfinance data.",
-  source_summary: "Market data comes from Yahoo Finance/yfinance and AI is generated from the visible evidence.",
+  data_note: "即時分析使用最新可取得的 yfinance 資料。",
+  source_summary: "市場資料來自 Yahoo Finance/yfinance；新聞/題材保留原始新聞連結，AI 面根據可見證據產生。",
 };
 
 const portfolioResponse = {
@@ -842,6 +858,7 @@ describe("App", () => {
   it("searches by company name and selects a ticker suggestion", async () => {
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: "即時工作台" }));
     fireEvent.change(screen.getByLabelText("輸入代號或股名"), { target: { value: "台積電" } });
     fireEvent.click(await screen.findByText("Taiwan Semiconductor Manufacturing Company"));
 
@@ -852,18 +869,20 @@ describe("App", () => {
   it("searches a ticker and renders market data", async () => {
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: "即時工作台" }));
     fireEvent.submit(screen.getByRole("button", { name: "查詢" }).closest("form"));
 
     expect(await screen.findByText("NVIDIA Corporation")).toBeInTheDocument();
     expect(screen.getAllByText("NVDA").length).toBeGreaterThan(1);
     expect(screen.getByRole("img", { name: "30 day price line chart" })).toBeInTheDocument();
     expect(await screen.findByText("記錄這一刻的判斷")).toBeInTheDocument();
-    expect(screen.getByText("Market data comes from Yahoo Finance/yfinance and AI is generated from the visible evidence.")).toBeInTheDocument();
+    expect(screen.getByText("市場資料來自 Yahoo Finance/yfinance；新聞/題材保留原始新聞連結，AI 面根據可見證據產生。")).toBeInTheDocument();
   });
 
   it("records a live analysis decision into portfolio tracking", async () => {
     render(<App />);
 
+    fireEvent.click(screen.getByRole("button", { name: "即時工作台" }));
     fireEvent.submit(screen.getByRole("button", { name: "查詢" }).closest("form"));
     expect(await screen.findByText("記錄這一刻的判斷")).toBeInTheDocument();
 
@@ -935,6 +954,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.click(screen.getByRole("button", { name: "Live Desk" }));
     fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
     await screen.findByText("NVIDIA Corporation");
     expect(await screen.findByText("AI Bull/Bear Debate")).toBeInTheDocument();
@@ -956,6 +976,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.click(screen.getByRole("button", { name: "Live Desk" }));
     fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
     await screen.findByText("NVIDIA Corporation");
 
@@ -973,24 +994,26 @@ describe("App", () => {
   it("loads records with settled scoreboard data", async () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("button", { name: "戰績" }));
+    fireEvent.click(screen.getByRole("button", { name: "復盤中心" }));
 
-    expect(await screen.findByText("判斷戰績")).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "復盤中心" })).toBeInTheDocument();
+    expect(await screen.findByText("練習作答紀錄")).toBeInTheDocument();
+    expect(screen.getByText("A correct result still needs evidence quality.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "即時判斷" }));
     expect(screen.getByText("7 日勝率")).toBeInTheDocument();
     expect(screen.getAllByText("50%").length).toBeGreaterThan(1);
     expect(screen.getByText("110.00 (+10.00%) 勝")).toBeInTheDocument();
     expect(screen.getByText("待結算")).toBeInTheDocument();
-    expect(await screen.findByText("練習作答紀錄")).toBeInTheDocument();
-    expect(screen.getByText("A correct result still needs evidence quality.")).toBeInTheDocument();
   });
 
   it("edits and deletes records and practice attempts", async () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    fireEvent.click(screen.getByRole("button", { name: "Records" }));
-    expect(await screen.findByText("Judgment Record")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Review Center" }));
+    expect(await screen.findByRole("heading", { name: "Review Center" })).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: "Live Judgments" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
     fireEvent.change(screen.getByLabelText("Review note"), {
       target: { value: "Need better judge comparison." },
@@ -1004,6 +1027,12 @@ describe("App", () => {
       expect(JSON.parse(recordUpdateCall[1].body).review_note).toBe("Need better judge comparison.");
     });
 
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => {
+      expect(global.fetch.mock.calls.some(([url, options]) => url === "/api/records/1" && options?.method === "DELETE")).toBe(true);
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Practice Answers" }));
     fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1));
     fireEvent.change(screen.getAllByLabelText("Review note").at(-1), {
       target: { value: "I chased the visible trend." },
@@ -1019,7 +1048,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
     await waitFor(() => {
-      expect(global.fetch.mock.calls.some(([url, options]) => url === "/api/records/1" && options?.method === "DELETE")).toBe(true);
+      expect(global.fetch.mock.calls.some(([url, options]) => url === "/api/practice/attempts/7" && options?.method === "DELETE")).toBe(true);
     });
   });
 
@@ -1044,6 +1073,12 @@ describe("App", () => {
     expect(screen.getByText("Evidence refs: T1, A1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "News/Theme" }));
     expect(screen.getByText("AI demand remains a key theme")).toBeInTheDocument();
+    expect(screen.getByText("AI accelerator demand remains the main market theme around the company.")).toBeInTheDocument();
+    expect(
+      screen.getAllByRole("link", { name: "Open original article" }).some(
+        (link) => link.getAttribute("href") === "https://example.com/news/nvda-ai-demand",
+      ),
+    ).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "AI" }));
     expect(screen.getAllByText(/AI suggested side/).length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole("button", { name: "Evidence Pack" }));
@@ -1186,6 +1221,7 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
 
+    fireEvent.click(screen.getByRole("button", { name: "Live Desk" }));
     expect(screen.getByLabelText("Ticker or company name")).toBeInTheDocument();
     fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
     await screen.findByText("NVIDIA Corporation");

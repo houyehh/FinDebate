@@ -58,7 +58,17 @@ def _install_live_fakes(monkeypatch, price_box: dict[str, float]) -> None:
     monkeypatch.setattr(
         live_analysis,
         "_news_snapshot",
-        lambda _ticker: [SnapshotMetric(label="Recent news", value="AI demand remains the main theme", detail="Mock Wire 2026-04-30")],
+        lambda _ticker: [
+            SnapshotMetric(
+                label="Recent news",
+                value="AI demand remains the main theme",
+                detail="Mock Wire · 2026-04-30",
+                source_name="Mock Wire",
+                source_url="https://example.com/news/nvda-ai",
+                published_at="2026-04-30",
+                summary="Mock summary from the original news payload.",
+            )
+        ],
     )
 
 
@@ -77,6 +87,10 @@ def test_live_analysis_builds_evidence_based_current_workbench(monkeypatch) -> N
     assert body["technical_snapshot"]
     assert body["fundamental_snapshot"][0]["value"] == "+12.0%"
     assert body["news_snapshot"][0]["value"] == "AI demand remains the main theme"
+    assert body["news_snapshot"][0]["source_url"] == "https://example.com/news/nvda-ai"
+    assert body["news_snapshot"][0]["summary"] == "Mock summary from the original news payload."
+    news_evidence = next(item for item in body["evidence_pack"] if item["category"] == "news")
+    assert news_evidence["source_url"] == "https://example.com/news/nvda-ai"
     assert "20 日趨勢" in body["ai_snapshot"]["bull_thesis"]
     assert body["ai_snapshot"]["source"] == "deterministic_ai_coach"
     assert body["evidence_pack"]

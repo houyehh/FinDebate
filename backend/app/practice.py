@@ -23,6 +23,10 @@ class SnapshotMetric(BaseModel):
     value: str
     detail: str = ""
     tone: MetricTone = "neutral"
+    source_name: str = ""
+    source_url: str = ""
+    published_at: str = ""
+    summary: str = ""
 
 
 class EvidenceItem(BaseModel):
@@ -648,6 +652,7 @@ def _case_from_points(
         news_snapshot,
         chip_snapshot,
         ai_snapshot,
+        zh=language.startswith("zh"),
     )
     ai_debate = build_ai_debate(
         ticker,
@@ -983,6 +988,8 @@ def _news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric
                 label="Business lane",
                 value=" / ".join(str(item) for item in [sector, industry] if item),
                 detail="Current yfinance company profile; use as business context, not future price evidence.",
+                source_name="Yahoo Finance / yfinance",
+                source_url=_finance_source_url(ticker),
             )
         )
     if isinstance(summary, str) and summary:
@@ -991,6 +998,9 @@ def _news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric
                 label="What it does",
                 value=_short_text(summary, 96),
                 detail="Business context only; do not treat it as an as-of-date filing.",
+                summary=_short_text(summary, 180),
+                source_name="Yahoo Finance / yfinance",
+                source_url=_finance_source_url(ticker),
             )
         )
 
@@ -1018,7 +1028,10 @@ def _news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric
         if not title:
             continue
         publisher = _news_publisher(item)
-        source_detail = publisher or "yfinance news item"
+        source_url = _news_url(item) or _finance_source_url(ticker)
+        source_name = publisher or "Yahoo Finance News"
+        summary = _news_summary(item)
+        source_detail = source_name
         if published_at:
             source_detail = f"{source_detail} · {published_at.isoformat()}"
         metrics.append(
@@ -1027,6 +1040,10 @@ def _news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric
                 value=_short_text(title, 88),
                 detail=source_detail,
                 tone="neutral",
+                source_name=source_name,
+                source_url=source_url,
+                published_at=published_at.isoformat() if published_at else "",
+                summary=_short_text(summary, 180),
             )
         )
 
@@ -1039,6 +1056,8 @@ def _news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric
                 value="No yfinance news available before the cutoff",
                 detail="The drill avoids showing later headlines that the past self could not know.",
                 tone="warn",
+                source_name="Yahoo Finance / yfinance",
+                source_url=_finance_source_url(ticker),
             )
         )
     return metrics[:5]
@@ -1091,8 +1110,21 @@ def _demo_news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotM
     theme, detail = themes.get(ticker, ("Theme unavailable", "Use the news panel as context, not as a standalone signal."))
     cutoff_detail = f"As-of {as_of}; yfinance does not provide reliable historical headline backfill here." if as_of else "Fallback item keeps the drill usable when yfinance news is unavailable."
     return [
-        SnapshotMetric(label="Theme lens", value=theme, detail=detail),
-        SnapshotMetric(label="Historical news", value="No as-of headline available", detail=cutoff_detail, tone="warn"),
+        SnapshotMetric(
+            label="Theme lens",
+            value=theme,
+            detail=detail,
+            source_name="Local demo theme fallback",
+            source_url=_finance_source_url(ticker),
+        ),
+        SnapshotMetric(
+            label="Historical news",
+            value="No as-of headline available",
+            detail=cutoff_detail,
+            tone="warn",
+            source_name="Yahoo Finance / yfinance",
+            source_url=_finance_source_url(ticker),
+        ),
     ]
 
 
@@ -1195,6 +1227,106 @@ def localized_ai_snapshot(
     )
 
 
+METRIC_LABEL_ZH = {
+    "5D return": "5 日報酬",
+    "20D return": "20 日報酬",
+    "MA5 / MA10 / MA20": "MA5 / MA10 / MA20",
+    "Bollinger": "布林通道",
+    "RSI14": "RSI14",
+    "KD": "KD",
+    "MACD hist": "MACD 柱狀體",
+    "20D volatility": "20 日波動",
+    "Market cap": "市值",
+    "Trailing PE": "本益比 TTM",
+    "Forward PE": "預估本益比",
+    "Revenue growth": "營收成長",
+    "Profit margin": "淨利率",
+    "Debt/equity": "負債權益比",
+    "Analyst proxy": "分析師傾向",
+    "Fundamental data": "基本面資料",
+    "Historical financials": "歷史財務資料",
+    "Financial period": "財報期間",
+    "Revenue": "營收",
+    "Revenue change": "營收變化",
+    "Net income": "淨利",
+    "Net margin": "淨利率",
+    "Operating income": "營業利益",
+    "Business lane": "業務領域",
+    "What it does": "公司介紹",
+    "As-of news": "當時新聞",
+    "Recent news": "近期新聞",
+    "Historical news": "歷史新聞",
+    "Theme lens": "題材視角",
+    "Volume / 20D avg": "量能 / 20 日均量",
+    "OBV 10D proxy": "OBV 10 日代理",
+    "Close location": "收盤位置",
+    "Price-volume read": "價量解讀",
+}
+
+METRIC_VALUE_ZH = {
+    "Not enough data": "資料不足",
+    "As-of backfill unavailable": "當時資料回補不可用",
+    "No yfinance news available before the cutoff": "該日期前沒有 yfinance 可用新聞",
+    "No as-of headline available": "沒有當時可用新聞標題",
+    "Volume confirms move": "量能確認走勢",
+    "Mixed": "訊號混合",
+    "Price up without volume confirmation": "上漲但量能未確認",
+    "Theme unavailable": "題材資料不足",
+}
+
+METRIC_DETAIL_ZH = {
+    "Close location relative to 20D bands.": "收盤價相對於 20 日布林通道的位置。",
+    "Over 70 can be crowded; under 40 can be weak.": "高於 70 可能偏擁擠，低於 40 可能偏弱。",
+    "Daily close-to-close volatility proxy.": "以每日收盤變化估算的波動代理值。",
+    "Latest yfinance company profile proxy.": "最新 yfinance 公司資料代理值。",
+    "Latest yfinance recommendation key.": "最新 yfinance 分析師建議代理值。",
+    "yfinance did not return enough fundamental fields for this asset.": "yfinance 對此標的沒有回傳足夠基本面欄位。",
+    "Current valuation and revenue ratios are hidden to avoid future leakage.": "為避免未來資訊洩漏，已隱藏目前估值與營收比率。",
+    "Latest quarterly financial period ending before the question cutoff; filing lag is approximated.": "題目截止日前最近一期季度財報；申報延遲以近似方式處理。",
+    "Quarterly statement value before cutoff.": "題目截止日前可見的季度財報數值。",
+    "Sequential change from the prior available quarter.": "相較前一個可用季度的變化。",
+    "Net income divided by revenue.": "淨利除以營收。",
+    "Current yfinance company profile; use as business context, not future price evidence.": "最新 yfinance 公司資料；只作為業務脈絡，不當作未來價格證據。",
+    "Business context only; do not treat it as an as-of-date filing.": "僅作為業務脈絡，不視為當時已公告的正式文件。",
+    "The drill avoids showing later headlines that the past self could not know.": "本題避免顯示當時不可能知道的未來新聞。",
+    "Local demo profile, not a live filing feed.": "本機 demo 資料，不是真實即時財報來源。",
+    "Used only for training context.": "僅作訓練脈絡使用。",
+    "Price-volume read, not institutional flow.": "價量解讀，不等同於法人籌碼資料。",
+    "Uses close direction x volume.": "以收盤方向乘以成交量估算。",
+    "Close position inside daily high-low range.": "收盤價位於當日高低區間中的位置。",
+}
+
+
+def localized_snapshot_metrics(metrics: list[SnapshotMetric], language: str) -> list[SnapshotMetric]:
+    if not language.startswith("zh"):
+        return metrics
+    return [
+        metric.model_copy(
+            update={
+                "label": METRIC_LABEL_ZH.get(metric.label, metric.label),
+                "value": METRIC_VALUE_ZH.get(metric.value, metric.value),
+                "detail": METRIC_DETAIL_ZH.get(metric.detail, _translate_metric_detail(metric.detail)),
+            }
+        )
+        for metric in metrics
+    ]
+
+
+def _translate_metric_detail(detail: str) -> str:
+    if not detail:
+        return detail
+    if detail.startswith("As-of ") and "yfinance does not provide reliable historical headline backfill" in detail:
+        return detail.replace(
+            "yfinance does not provide reliable historical headline backfill here.",
+            "yfinance 在這裡沒有可靠的歷史新聞標題回補。",
+        )
+    if detail == "Fallback item keeps the drill usable when yfinance news is unavailable.":
+        return "當 yfinance 沒有可用新聞時，使用此 fallback 讓題目仍可練習。"
+    if " · " in detail:
+        return detail
+    return METRIC_DETAIL_ZH.get(detail, detail)
+
+
 def build_evidence_pack(
     ticker: str,
     technical: list[SnapshotMetric],
@@ -1202,6 +1334,7 @@ def build_evidence_pack(
     news: list[SnapshotMetric],
     chip: list[SnapshotMetric],
     ai: AiSnapshot | None,
+    zh: bool = False,
 ) -> list[EvidenceItem]:
     evidence: list[EvidenceItem] = []
     evidence.extend(_metric_evidence_items(ticker, "technical", "T", technical))
@@ -1216,9 +1349,13 @@ def build_evidence_pack(
                 EvidenceItem(
                     evidence_id="A1",
                     category="ai",
-                    title="AI suggested side",
-                    value=_side_label(ai.suggested_side, False),
-                    detail=f"Confidence {ai.confidence}/5. {ai.narrative}",
+                    title="AI 建議方向" if zh else "AI suggested side",
+                    value=_side_label(ai.suggested_side, zh),
+                    detail=(
+                        f"信心度 {ai.confidence}/5。{ai.narrative}"
+                        if zh
+                        else f"Confidence {ai.confidence}/5. {ai.narrative}"
+                    ),
                     tone=ai.suggested_side if ai.suggested_side in {"bull", "bear"} else "neutral",
                     source_name=ai.source,
                     source_url=source_url,
@@ -1226,7 +1363,7 @@ def build_evidence_pack(
                 EvidenceItem(
                     evidence_id="A2",
                     category="ai",
-                    title="AI bull thesis",
+                    title="AI 多頭論點" if zh else "AI bull thesis",
                     value=ai.bull_thesis,
                     detail=ai.key_uncertainty,
                     tone="bull",
@@ -1236,7 +1373,7 @@ def build_evidence_pack(
                 EvidenceItem(
                     evidence_id="A3",
                     category="ai",
-                    title="AI bear thesis",
+                    title="AI 空頭論點" if zh else "AI bear thesis",
                     value=ai.bear_thesis,
                     detail=ai.key_uncertainty,
                     tone="bear",
@@ -1328,10 +1465,10 @@ def _metric_evidence_items(
             category=category,
             title=metric.label,
             value=metric.value,
-            detail=metric.detail,
+            detail=metric.summary or metric.detail,
             tone=metric.tone,
-            source_name="Yahoo Finance / yfinance",
-            source_url=_finance_source_url(ticker),
+            source_name=metric.source_name or "Yahoo Finance / yfinance",
+            source_url=metric.source_url or _finance_source_url(ticker),
         )
         for index, metric in enumerate(metrics[:4])
     ]
@@ -1566,6 +1703,7 @@ def _future_results(points: list[MarketIndicatorPoint], selected_index: int) -> 
 
 
 def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
+    zh = language.startswith("zh")
     data = case.model_dump(
         exclude={
             "title_zh",
@@ -1582,7 +1720,16 @@ def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
             "answer_explanation_en",
         }
     )
-    if language.startswith("zh"):
+    public_technical = localized_snapshot_metrics(case.technical_snapshot, language)
+    public_fundamental = localized_snapshot_metrics(case.fundamental_snapshot, language)
+    public_news = localized_snapshot_metrics(case.news_snapshot, language)
+    public_chip = localized_snapshot_metrics(case.chip_snapshot, language)
+    data["technical_snapshot"] = [item.model_dump(mode="json") for item in public_technical]
+    data["fundamental_snapshot"] = [item.model_dump(mode="json") for item in public_fundamental]
+    data["news_snapshot"] = [item.model_dump(mode="json") for item in public_news]
+    data["chip_snapshot"] = [item.model_dump(mode="json") for item in public_chip]
+
+    if zh:
         data.update(
             {
                 "title": case.title_zh or case.title,
@@ -1609,11 +1756,12 @@ def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
     public_ai = AiSnapshot.model_validate(data["ai_snapshot"]) if data.get("ai_snapshot") else None
     evidence_pack = build_evidence_pack(
         case.ticker,
-        case.technical_snapshot,
-        case.fundamental_snapshot,
-        case.news_snapshot,
-        case.chip_snapshot,
+        public_technical,
+        public_fundamental,
+        public_news,
+        public_chip,
         public_ai,
+        zh=zh,
     )
     data["evidence_pack"] = [item.model_dump(mode="json") for item in evidence_pack]
     data["ai_debate"] = build_ai_debate(
@@ -1622,7 +1770,7 @@ def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
         data.get("bull_points", case.bull_points),
         data.get("bear_points", case.bear_points),
         public_ai,
-        language.startswith("zh"),
+        zh,
     ).model_dump(mode="json")
     return PracticeQuestion(**data)
 
@@ -1955,11 +2103,58 @@ def _news_publisher(item: Any) -> str:
     content = item.get("content") if isinstance(item.get("content"), dict) else {}
     provider = content.get("provider") if isinstance(content.get("provider"), dict) else {}
     publisher = item.get("publisher") or item.get("provider") or provider.get("displayName") or provider.get("name")
-    published = item.get("providerPublishTime") or content.get("pubDate") or content.get("displayTime")
-    parts = [str(publisher).strip()] if publisher else []
-    if published:
-        parts.append(str(published).strip())
-    return " · ".join(parts)
+    return str(publisher or "").strip()
+
+
+def _news_summary(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    candidates = [
+        item.get("summary"),
+        item.get("description"),
+        item.get("snippet"),
+        content.get("summary"),
+        content.get("description"),
+        content.get("snippet"),
+    ]
+    for candidate in candidates:
+        text = str(candidate or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _news_url(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    candidates = [
+        item.get("link"),
+        item.get("url"),
+        item.get("sourceUrl"),
+        content.get("canonicalUrl"),
+        content.get("clickThroughUrl"),
+        content.get("url"),
+        content.get("link"),
+    ]
+    for candidate in candidates:
+        url = _url_from_news_candidate(candidate)
+        if url:
+            return url
+    return ""
+
+
+def _url_from_news_candidate(candidate: Any) -> str:
+    if isinstance(candidate, str):
+        text = candidate.strip()
+        return text if text.startswith(("http://", "https://")) else ""
+    if isinstance(candidate, dict):
+        for key in ["url", "href", "link"]:
+            url = _url_from_news_candidate(candidate.get(key))
+            if url:
+                return url
+    return ""
 
 
 def _parse_iso_date(value: Any) -> date | None:

@@ -1,5 +1,35 @@
 # 開發進度
 
+## 2026-07-21 Home/Review Center 重構與真實新聞來源
+
+### 做了什麼
+- 將產品主視覺改為 `Alpha Gym`，Home 改成純產品介紹與功能入口，不再混入即時分析輸入框與工作台。
+- 新增獨立 Live Desk / 即時工作台頁面，保留代號/股名搜尋、30 日價格線、即時工作台、AI Debate 與 Portfolio 記錄流程。
+- 將 Records 改成 Review Center / 復盤中心，使用 tabs 分開「訓練作答」與「即時判斷」，降低兩種紀錄混在同一張表的混亂感。
+- 擴充新聞資料欄位：`source_name`、`source_url`、`published_at`、`summary`，前端新聞面板會顯示新聞標題、摘要、來源、日期與原始新聞連結。
+- 將 evidence pack 的新聞證據來源改成優先使用原始新聞 URL；沒有原始 URL 時才退回 Yahoo Finance quote page。
+- 新增繁中工作台資料本地化 helper，讓技術面、基本面、新聞/題材與價量欄位在繁中 UI 下顯示中文標籤與主要說明。
+
+### 關鍵決定
+- 真實新聞不硬編摘要；若 yfinance 沒有提供摘要，前端明確提示使用原標題與連結查證。
+- Practice 的歷史題若找不到 cutoff 前新聞，仍避免顯示未來新聞，維持無未來資訊洩漏的訓練前提。
+- Review Center 預設顯示訓練作答，因為產品主軸是投資判斷力訓練；即時判斷則放在第二個 tab。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m py_compile backend\app\practice.py backend\app\live_analysis.py backend\app\main.py backend\app\database.py` 通過。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q` 通過：36 passed。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests\test_live_analysis.py backend\tests\test_practice.py -q` 通過：13 passed。
+- `npm.cmd test -- --run` 通過：13 passed。
+- `npm.cmd run build` 通過。
+- 本機確認 `http://127.0.0.1:8020/api/health` 為 ok，`http://127.0.0.1:5184/` 回 200。
+
+### 遇到問題
+- 前端測試在 Review Center 分頁後原本仍期待刪除即時判斷紀錄，實際上已切到練習作答 tab；已調整測試流程，分別驗證兩種紀錄的刪除。
+- yfinance 新聞格式可能有舊版 `link` 或新版 `content.canonicalUrl.url`，因此 URL parser 做成多欄位兼容。
+
+### 下一步
+- 可進一步做首頁視覺細節、比賽影片腳本與 demo walkthrough，讓評審更快理解「判斷訓練」而不是只看到金融 dashboard。
+
 ## 2026-07-21 Portfolio CRUD、Records 復盤與 AI Debate 工作台
 
 ### 做了什麼
