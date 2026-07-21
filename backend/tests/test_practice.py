@@ -33,6 +33,8 @@ def test_practice_dashboard_hides_answers_and_shows_dimensions(monkeypatch) -> N
     assert first_question["fundamental_snapshot"]
     assert first_question["chip_snapshot"]
     assert first_question["ai_snapshot"]["suggested_side"] in {"bull", "bear", "neutral"}
+    assert first_question["evidence_pack"]
+    assert first_question["ai_debate"]["bull"]["claims"]
     assert first_question["training_goal"]
 
 
@@ -97,6 +99,29 @@ def test_practice_attempt_persists_weights_feedback_and_future_results(monkeypat
     dashboard = client.get("/api/practice").json()
     assert dashboard["stats"]["total_attempts"] == 1
     assert dashboard["recent_attempts"][0]["question_id"] == "aapl-historical-quality-snapshot"
+
+    attempt_id = body["id"]
+    updated = client.patch(
+        f"/api/practice/attempts/{attempt_id}",
+        json={
+            "selected_side": "neutral",
+            "confidence": 2,
+            "rationale": "After review, the edge looked weaker.",
+            "review_note": "Overweighted the original trend.",
+            "language": "en",
+            "weights": {"technical": 40, "fundamental": 20, "chip": 20, "ai": 20},
+        },
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()
+    assert updated_body["selected_side"] == "neutral"
+    assert updated_body["review_note"] == "Overweighted the original trend."
+    assert updated_body["feedback"]["summary"]
+
+    deleted = client.delete(f"/api/practice/attempts/{attempt_id}")
+    assert deleted.status_code == 200
+    dashboard = client.get("/api/practice").json()
+    assert dashboard["stats"]["total_attempts"] == 0
 
 
 def test_practice_dashboard_handles_legacy_attempt_without_question_case(monkeypatch) -> None:
@@ -226,6 +251,8 @@ def test_random_market_question_contains_historical_factor_snapshots(monkeypatch
     assert question.news_snapshot
     assert question.chip_snapshot
     assert question.ai_snapshot is not None
+    assert question.evidence_pack
+    assert question.ai_debate is not None
     last_point = question.market_window[-1]
     assert last_point.k is not None
     assert last_point.d is not None

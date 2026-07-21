@@ -44,6 +44,7 @@ class VerdictHistoryRecord(BaseModel):
     side: VerdictSide
     confidence: int
     note: str
+    review_note: str = ""
     price_at_verdict: float
     created_at: str
     judge_side: VerdictSide
@@ -67,6 +68,17 @@ class ScoreboardStats(BaseModel):
 class ScoreboardResponse(BaseModel):
     stats: ScoreboardStats
     records: list[VerdictHistoryRecord]
+
+
+class VerdictUpdateRequest(BaseModel):
+    side: VerdictSide | None = None
+    confidence: int | None = Field(default=None, ge=1, le=5)
+    note: str | None = None
+    review_note: str | None = None
+
+
+class VerdictNotFoundError(ValueError):
+    pass
 
 
 def database_path() -> Path:
@@ -155,6 +167,8 @@ def init_db() -> None:
         _ensure_column(connection, "practice_attempts", "weights_json", "TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(connection, "practice_attempts", "ai_side", "TEXT")
         _ensure_column(connection, "practice_attempts", "ai_agreement", "INTEGER")
+        _ensure_column(connection, "practice_attempts", "review_note", "TEXT NOT NULL DEFAULT ''")
+        _ensure_column(connection, "verdicts", "review_note", "TEXT NOT NULL DEFAULT ''")
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS portfolio_decisions (
@@ -173,6 +187,10 @@ def init_db() -> None:
             )
             """
         )
+        _ensure_column(connection, "portfolio_decisions", "status", "TEXT NOT NULL DEFAULT 'open'")
+        _ensure_column(connection, "portfolio_decisions", "exit_price", "REAL")
+        _ensure_column(connection, "portfolio_decisions", "exit_at", "TEXT")
+        _ensure_column(connection, "portfolio_decisions", "review_note", "TEXT NOT NULL DEFAULT ''")
 
 
 def _ensure_column(
@@ -283,7 +301,7 @@ def get_scoreboard() -> ScoreboardResponse:
         rows = connection.execute(
             """
             SELECT
-                v.id, v.debate_id, d.ticker, v.side, v.confidence, v.note,
+                v.id, v.debate_id, d.ticker, v.side, v.confidence, v.note, v.review_note,
                 v.price_at_verdict, v.created_at, v.judge_side, v.judge_agreement
             FROM verdicts v
             JOIN debates d ON d.id = v.debate_id
@@ -310,6 +328,7 @@ def get_scoreboard() -> ScoreboardResponse:
                     side=row["side"],
                     confidence=row["confidence"],
                     note=row["note"],
+                    review_note=row["review_note"],
                     price_at_verdict=row["price_at_verdict"],
                     created_at=row["created_at"],
                     judge_side=row["judge_side"],
@@ -328,6 +347,72 @@ def get_scoreboard() -> ScoreboardResponse:
             )
 
     return ScoreboardResponse(stats=_scoreboard_stats(records), records=records)
+
+
+def update_verdict_record(verdict_id: int, request: VerdictUpdateRequest) -> VerdictHistoryRecord:
+    init_db()
+    with connect() as connection:
+        row = connection.execute(
+            "SELECT id, debate_id, side, confidence, note, review_note, judge_side FROM verdicts WHERE id = ?",
+            (verdict_id,),
+        ).fetchone()
+        if row is None:
+            raise VerdictNotFoundError(f"Verdict {verdict_id} was not found.")
+
+        side = request.side or row["side"]
+        confidence = request.confidence if request.confidence is not None else row["confidence"]
+        note = row["note"] if request.note is None else request.note
+        review_note = row["review_note"] if request.review_note is None else request.review_note
+        judge_agreement = side == row["judge_side"]
+        connection.execute(
+            """
+            UPDATE verdicts
+            SET side = ?, confidence = ?, note = ?, review_note = ?, judge_agreement = ?
+            WHERE id = ?
+            """,
+            (side, confidence, note, review_note, int(judge_agreement), verdict_id),
+        )
+        _recompute_settlement_results(connection, verdict_id, side)
+
+    record = _verdict_record_by_id(verdict_id)
+    if record is None:
+        raise VerdictNotFoundError(f"Verdict {verdict_id} was not found.")
+    return record
+
+
+def delete_verdict_record(verdict_id: int) -> None:
+    init_db()
+    with connect() as connection:
+        row = connection.execute("SELECT debate_id FROM verdicts WHERE id = ?", (verdict_id,)).fetchone()
+        if row is None:
+            raise VerdictNotFoundError(f"Verdict {verdict_id} was not found.")
+        debate_id = row["debate_id"]
+        connection.execute("DELETE FROM settlements WHERE verdict_id = ?", (verdict_id,))
+        connection.execute("DELETE FROM verdicts WHERE id = ?", (verdict_id,))
+        remaining = connection.execute("SELECT COUNT(*) AS count FROM verdicts WHERE debate_id = ?", (debate_id,)).fetchone()
+        if remaining["count"] == 0:
+            connection.execute("DELETE FROM debates WHERE id = ?", (debate_id,))
+
+
+def _verdict_record_by_id(verdict_id: int) -> VerdictHistoryRecord | None:
+    response = get_scoreboard()
+    return next((record for record in response.records if record.id == verdict_id), None)
+
+
+def _recompute_settlement_results(connection: sqlite3.Connection, verdict_id: int, side: VerdictSide) -> None:
+    rows = connection.execute(
+        """
+        SELECT id, pct_change, result
+        FROM settlements
+        WHERE verdict_id = ? AND result != 'pending' AND pct_change IS NOT NULL
+        """,
+        (verdict_id,),
+    ).fetchall()
+    for row in rows:
+        connection.execute(
+            "UPDATE settlements SET result = ? WHERE id = ?",
+            (_settlement_result(side, row["pct_change"]), row["id"]),
+        )
 
 
 def refresh_pending_settlements() -> None:

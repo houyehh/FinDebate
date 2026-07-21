@@ -202,3 +202,23 @@ def test_scoreboard_refreshes_settlements_and_stats(monkeypatch) -> None:
     assert seven_day.settle_price == 110.0
     assert seven_day.pct_change == 10.0
     assert seven_day.result == "win"
+
+    client = TestClient(app)
+    updated = client.patch(
+        f"/api/records/{first_record.id}",
+        json={
+            "side": "bear",
+            "confidence": 3,
+            "note": "Changed after review.",
+            "review_note": "I ignored the settlement direction.",
+        },
+    )
+    assert updated.status_code == 200
+    updated_body = updated.json()
+    assert updated_body["side"] == "bear"
+    assert updated_body["review_note"] == "I ignored the settlement direction."
+    updated_7d = next(settlement for settlement in updated_body["settlements"] if settlement["horizon"] == "7d")
+    assert updated_7d["result"] == "loss"
+
+    deleted = client.delete(f"/api/records/{first_record.id}")
+    assert deleted.status_code == 200

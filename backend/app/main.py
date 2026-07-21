@@ -3,7 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from app import settings
-from app.database import ScoreboardResponse, VerdictRecord, VerdictSide, get_scoreboard, save_verdict
+from app.database import (
+    ScoreboardResponse,
+    VerdictHistoryRecord,
+    VerdictNotFoundError,
+    VerdictRecord,
+    VerdictSide,
+    VerdictUpdateRequest,
+    delete_verdict_record,
+    get_scoreboard,
+    save_verdict,
+    update_verdict_record,
+)
 from app.debate import (
     DebateConfigurationError,
     DebateGenerationError,
@@ -17,22 +28,30 @@ from app.debate import (
 )
 from app.live_analysis import (
     LiveAnalysisResponse,
+    PortfolioDecisionNotFoundError,
     PortfolioDecisionRecord,
     PortfolioDecisionRequest,
+    PortfolioDecisionUpdateRequest,
     PortfolioResponse,
+    delete_portfolio_decision,
     get_live_analysis,
     get_portfolio,
     save_portfolio_decision,
+    update_portfolio_decision,
 )
 from app.market_data import TickerLookupError, TickerSearchResult, TickerSnapshot, get_ticker_snapshot, search_tickers
 from app.practice import (
     PracticeAttemptRecord,
+    PracticeAttemptNotFoundError,
     PracticeAttemptRequest,
+    PracticeAttemptUpdateRequest,
     PracticeDashboardResponse,
     PracticeQuestionNotFoundError,
     PracticeValidationError,
+    delete_practice_attempt,
     get_practice_dashboard,
     submit_practice_attempt,
+    update_practice_attempt,
 )
 
 app = FastAPI(title="Bull vs Bear Arena API")
@@ -212,6 +231,23 @@ def read_records() -> ScoreboardResponse:
     return get_scoreboard()
 
 
+@app.patch("/api/records/{verdict_id}", response_model=VerdictHistoryRecord)
+def update_record(verdict_id: int, request: VerdictUpdateRequest) -> VerdictHistoryRecord:
+    try:
+        return update_verdict_record(verdict_id, request)
+    except VerdictNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+
+
+@app.delete("/api/records/{verdict_id}")
+def delete_record(verdict_id: int) -> dict[str, str]:
+    try:
+        delete_verdict_record(verdict_id)
+    except VerdictNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {"status": "deleted"}
+
+
 @app.get("/api/live-analysis/{ticker}", response_model=LiveAnalysisResponse)
 def read_live_analysis(ticker: str, language: str = "zh-Hant") -> LiveAnalysisResponse:
     try:
@@ -240,6 +276,26 @@ def create_portfolio_decision(request: PortfolioDecisionRequest) -> PortfolioDec
         ) from exc
 
 
+@app.patch("/api/portfolio/decisions/{decision_id}", response_model=PortfolioDecisionRecord)
+def update_portfolio_decision_record(
+    decision_id: int,
+    request: PortfolioDecisionUpdateRequest,
+) -> PortfolioDecisionRecord:
+    try:
+        return update_portfolio_decision(decision_id, request)
+    except PortfolioDecisionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+
+
+@app.delete("/api/portfolio/decisions/{decision_id}")
+def delete_portfolio_decision_record(decision_id: int) -> dict[str, str]:
+    try:
+        delete_portfolio_decision(decision_id)
+    except PortfolioDecisionNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {"status": "deleted"}
+
+
 @app.get("/api/portfolio", response_model=PortfolioResponse)
 def read_portfolio() -> PortfolioResponse:
     return get_portfolio()
@@ -261,3 +317,25 @@ def create_practice_attempt(request: PracticeAttemptRequest) -> PracticeAttemptR
         raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
     except PracticeQuestionNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+
+
+@app.patch("/api/practice/attempts/{attempt_id}", response_model=PracticeAttemptRecord)
+def update_practice_attempt_record(
+    attempt_id: int,
+    request: PracticeAttemptUpdateRequest,
+) -> PracticeAttemptRecord:
+    try:
+        return update_practice_attempt(attempt_id, request)
+    except PracticeValidationError as exc:
+        raise HTTPException(status_code=400, detail={"message": str(exc)}) from exc
+    except PracticeAttemptNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+
+
+@app.delete("/api/practice/attempts/{attempt_id}")
+def delete_practice_attempt_record(attempt_id: int) -> dict[str, str]:
+    try:
+        delete_practice_attempt(attempt_id)
+    except PracticeAttemptNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"message": str(exc)}) from exc
+    return {"status": "deleted"}

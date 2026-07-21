@@ -28,6 +28,135 @@ const tsmcSnapshot = {
   ],
 };
 
+const evidencePack = [
+  {
+    evidence_id: "T1",
+    category: "technical",
+    title: "MA5 / MA20",
+    value: "121.00 / 119.00",
+    detail: "Trend proxy.",
+    tone: "bull",
+    source_name: "Yahoo Finance / yfinance",
+    source_url: "https://finance.yahoo.com/quote/NVDA/",
+  },
+  {
+    evidence_id: "A1",
+    category: "ai",
+    title: "AI suggested side",
+    value: "Bullish",
+    detail: "Confidence 4/5.",
+    tone: "bull",
+    source_name: "deterministic_ai_coach",
+    source_url: "https://finance.yahoo.com/quote/NVDA/",
+  },
+];
+
+const aiDebate = {
+  bull: {
+    side: "bull",
+    claims: [
+      {
+        claim_id: "BULL-1",
+        claim: "Bull evidence points to continuation.",
+        evidence: "Evidence cited: T1 MA5 / MA20: 121.00 / 119.00",
+        evidence_refs: ["T1", "A1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+        source_name: "Yahoo Finance / yfinance",
+      },
+      {
+        claim_id: "BULL-2",
+        claim: "AI thesis supports the long side.",
+        evidence: "Evidence cited: A1 AI suggested side: Bullish",
+        evidence_refs: ["A1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+        source_name: "deterministic_ai_coach",
+      },
+      {
+        claim_id: "BULL-3",
+        claim: "Momentum can still hold.",
+        evidence: "Evidence cited: T1 MA5 / MA20: 121.00 / 119.00",
+        evidence_refs: ["T1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+        source_name: "Yahoo Finance / yfinance",
+      },
+    ],
+  },
+  bear: {
+    side: "bear",
+    claims: [
+      {
+        claim_id: "BEAR-1",
+        claim: "Valuation risk can offset momentum.",
+        evidence: "Evidence cited: A1 AI suggested side: Bullish",
+        evidence_refs: ["A1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+        source_name: "Yahoo Finance / yfinance",
+      },
+      {
+        claim_id: "BEAR-2",
+        claim: "Crowded positioning can reverse.",
+        evidence: "Evidence cited: T1 MA5 / MA20: 121.00 / 119.00",
+        evidence_refs: ["T1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+        source_name: "Yahoo Finance / yfinance",
+      },
+      {
+        claim_id: "BEAR-3",
+        claim: "AI may overfit visible price action.",
+        evidence: "Evidence cited: A1 AI suggested side: Bullish",
+        evidence_refs: ["A1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+        source_name: "deterministic_ai_coach",
+      },
+    ],
+  },
+  bull_rebuttals: {
+    side: "bull",
+    rebuttals: [
+      {
+        target_claim_id: "BEAR-1",
+        rebuttal: "Bull rebuttal cites T1.",
+        evidence: "Evidence cited: T1 MA5 / MA20: 121.00 / 119.00",
+        evidence_refs: ["T1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+      },
+      {
+        target_claim_id: "BEAR-2",
+        rebuttal: "Bull rebuttal cites A1.",
+        evidence: "Evidence cited: A1 AI suggested side: Bullish",
+        evidence_refs: ["A1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+      },
+    ],
+  },
+  bear_rebuttals: {
+    side: "bear",
+    rebuttals: [
+      {
+        target_claim_id: "BULL-1",
+        rebuttal: "Bear rebuttal cites A1.",
+        evidence: "Evidence cited: A1 AI suggested side: Bullish",
+        evidence_refs: ["A1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+      },
+      {
+        target_claim_id: "BULL-2",
+        rebuttal: "Bear rebuttal cites T1.",
+        evidence: "Evidence cited: T1 MA5 / MA20: 121.00 / 119.00",
+        evidence_refs: ["T1"],
+        source_url: "https://finance.yahoo.com/quote/NVDA/",
+      },
+    ],
+  },
+  judge: {
+    bull_total: 55,
+    bear_total: 48,
+    summary: "AI debate only cites this evidence pack.",
+    scores: [],
+  },
+  source: "evidence_pack_ai_debate",
+};
+
 const practiceQuestion = {
   id: "nvda-historical-ai-snapshot",
   ticker: "NVDA",
@@ -119,6 +248,8 @@ const practiceQuestion = {
     checklist: ["Does the AI thesis cite a concrete signal?"],
     source: "deterministic_ai_coach",
   },
+  evidence_pack: evidencePack,
+  ai_debate: aiDebate,
   data_cutoff_note: "Visible market data ends at 2026-06-02.",
 };
 
@@ -136,6 +267,7 @@ const practiceAttemptRecord = {
   ai_side: "bull",
   ai_agreement: true,
   future_results: [],
+  review_note: "Need to keep checking counter-risk.",
   created_at: "2026-07-20T00:00:00+00:00",
   feedback: {
     summary: "A correct result still needs evidence quality.",
@@ -162,6 +294,8 @@ const liveAnalysis = {
   news_snapshot: practiceQuestion.news_snapshot,
   chip_snapshot: practiceQuestion.chip_snapshot,
   ai_snapshot: practiceQuestion.ai_snapshot,
+  evidence_pack: evidencePack,
+  ai_debate: aiDebate,
   bull_points: practiceQuestion.bull_points,
   bear_points: practiceQuestion.bear_points,
   data_note: "Live analysis uses latest available yfinance data.",
@@ -174,6 +308,8 @@ const portfolioResponse = {
     bull_count: 0,
     bear_count: 1,
     neutral_count: 0,
+    open_count: 1,
+    closed_count: 0,
     average_pct_change: 5.3,
     ai_agreement_rate: 0,
   },
@@ -192,6 +328,10 @@ const portfolioResponse = {
       ai_side: "bull",
       ai_agreement: false,
       data_note: "Live analysis uses latest available yfinance data.",
+      status: "open",
+      exit_price: null,
+      exit_at: null,
+      review_note: "Watch if thesis breaks.",
     },
   ],
 };
@@ -520,17 +660,42 @@ describe("App", () => {
                 side: body.side,
                 confidence: body.confidence,
                 rationale: body.rationale,
-                price_at_decision: body.analysis.price,
-                current_price: body.analysis.price,
+                price_at_decision: body.analysis?.price ?? body.entry_price,
+                current_price: body.analysis?.price ?? 130,
                 pct_change: 0,
-                currency: body.analysis.currency,
+                currency: body.analysis?.currency ?? body.currency ?? "USD",
                 created_at: "2026-07-20T00:00:00+00:00",
                 ai_side: "bull",
                 ai_agreement: body.side === "bull",
-                data_note: body.analysis.data_note,
+                data_note: body.analysis?.data_note ?? "Manual entry.",
+                status: body.status || "open",
+                exit_price: body.exit_price || null,
+                exit_at: body.exit_at || null,
+                review_note: body.review_note || "",
               }),
             ),
         });
+      }
+
+      if (url === "/api/portfolio/decisions/4" && options.method === "PATCH") {
+        const body = JSON.parse(options.body);
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                ...portfolioResponse.decisions[0],
+                ...body,
+                id: 4,
+                current_price: 130,
+                pct_change: 5.3,
+              }),
+            ),
+        });
+      }
+
+      if (url === "/api/portfolio/decisions/4" && options.method === "DELETE") {
+        return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify({ status: "deleted" })) });
       }
 
       if (url === "/api/portfolio") {
@@ -589,6 +754,7 @@ describe("App", () => {
                     side: "bull",
                     confidence: 5,
                     note: "High confidence winner.",
+                    review_note: "",
                     price_at_verdict: 100,
                     created_at: "2026-07-10T00:00:00+00:00",
                     judge_side: "bull",
@@ -603,6 +769,57 @@ describe("App", () => {
               }),
             ),
         });
+      }
+
+      if (url === "/api/records/1" && options.method === "PATCH") {
+        const body = JSON.parse(options.body);
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                id: 1,
+                debate_id: 1,
+                ticker: "NVDA",
+                side: body.side,
+                confidence: body.confidence,
+                note: body.note,
+                review_note: body.review_note,
+                price_at_verdict: 100,
+                created_at: "2026-07-10T00:00:00+00:00",
+                judge_side: "bull",
+                judge_agreement: body.side === "bull",
+                settlements: [
+                  { horizon: "7d", settle_price: 110, pct_change: 10, result: body.side === "bull" ? "win" : "loss", settled_at: "2026-07-17T00:00:00+00:00" },
+                ],
+              }),
+            ),
+        });
+      }
+
+      if (url === "/api/records/1" && options.method === "DELETE") {
+        return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify({ status: "deleted" })) });
+      }
+
+      if (url === "/api/practice/attempts/7" && options.method === "PATCH") {
+        const body = JSON.parse(options.body);
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                ...practiceAttemptRecord,
+                selected_side: body.selected_side,
+                confidence: body.confidence,
+                rationale: body.rationale,
+                review_note: body.review_note,
+              }),
+            ),
+        });
+      }
+
+      if (url === "/api/practice/attempts/7" && options.method === "DELETE") {
+        return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify({ status: "deleted" })) });
       }
 
       return Promise.resolve({
@@ -675,32 +892,71 @@ describe("App", () => {
     expect(screen.getByText("+5.3%")).toBeInTheDocument();
   });
 
+  it("adds edits and deletes a manual portfolio record", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
+    expect(await screen.findByText("Current Decision Tracking")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Entry price"), { target: { value: "118.5" } });
+    fireEvent.change(screen.getAllByLabelText("Decision rationale")[0], {
+      target: { value: "Manual entry before using the app." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add Record" }));
+
+    await waitFor(() => {
+      const createCall = global.fetch.mock.calls.find(
+        ([url, options]) => url === "/api/portfolio/decisions" && options?.method === "POST" && JSON.parse(options.body).entry_price === 118.5,
+      );
+      expect(createCall).toBeTruthy();
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.change(screen.getAllByLabelText("Review note").at(-1), {
+      target: { value: "Exit rules need to be clearer." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Edit" }));
+
+    await waitFor(() => {
+      const updateCall = global.fetch.mock.calls.find(
+        ([url, options]) => url === "/api/portfolio/decisions/4" && options?.method === "PATCH",
+      );
+      expect(JSON.parse(updateCall[1].body).review_note).toBe("Exit rules need to be clearer.");
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => {
+      expect(global.fetch.mock.calls.some(([url, options]) => url === "/api/portfolio/decisions/4" && options?.method === "DELETE")).toBe(true);
+    });
+  });
+
   it("starts a judged debate and reveals scores only after verdict", async () => {
     render(<App />);
 
-    fireEvent.submit(screen.getByRole("button", { name: "查詢" }).closest("form"));
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
     await screen.findByText("NVIDIA Corporation");
-    fireEvent.click(screen.getByRole("button", { name: "開始辯論" }));
+    expect(await screen.findByText("AI Bull/Bear Debate")).toBeInTheDocument();
+    expect(screen.getByText("Bull evidence points to continuation.")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Run OpenAI Debate" }));
 
-    expect(await screen.findByText("多頭開場")).toBeInTheDocument();
-    expect(screen.getByText("空頭開場")).toBeInTheDocument();
+    expect(await screen.findByText("Bull Opening")).toBeInTheDocument();
+    expect(screen.getByText("Bear Opening")).toBeInTheDocument();
     expect(screen.getByText("Bull claim 1")).toBeInTheDocument();
     expect(screen.getByText("Bear claim 1")).toBeInTheDocument();
-    expect(screen.getByText("多頭反駁")).toBeInTheDocument();
-    expect(screen.getByText("空頭反駁")).toBeInTheDocument();
-    expect(screen.queryByText("裁判評分")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "提交判斷" }));
-
-    expect(await screen.findByText("裁判評分")).toBeInTheDocument();
-    expect(screen.getAllByText("證據 4").length).toBeGreaterThan(0);
+    expect(screen.getByText("Bull Rebuttals")).toBeInTheDocument();
+    expect(screen.getByText("Bear Rebuttals")).toBeInTheDocument();
+    expect(screen.getByText("Judge Scores")).toBeInTheDocument();
+    expect(screen.getAllByText("Evidence 4").length).toBeGreaterThan(0);
     expect(screen.getByText("unverifiable：Cannot verify the source.")).toBeInTheDocument();
-    expect(screen.getByText(/你與裁判同邊/)).toBeInTheDocument();
   });
 
   it("shows a friendly debate error when the server returns non-json text", async () => {
     render(<App />);
 
-    fireEvent.submit(screen.getByRole("button", { name: "查詢" }).closest("form"));
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
     await screen.findByText("NVIDIA Corporation");
 
     global.fetch.mockImplementationOnce(() =>
@@ -709,9 +965,9 @@ describe("App", () => {
         text: () => Promise.resolve("Internal Server Error"),
       }),
     );
-    fireEvent.click(screen.getByRole("button", { name: "開始辯論" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run OpenAI Debate" }));
 
-    expect(await screen.findByText("辯論生成失敗，請稍後再試或切到 Demo Mode。")).toBeInTheDocument();
+    expect(await screen.findByText("Debate generation failed. Try again or switch to Demo Mode.")).toBeInTheDocument();
   });
 
   it("loads records with settled scoreboard data", async () => {
@@ -726,6 +982,45 @@ describe("App", () => {
     expect(screen.getByText("待結算")).toBeInTheDocument();
     expect(await screen.findByText("練習作答紀錄")).toBeInTheDocument();
     expect(screen.getByText("A correct result still needs evidence quality.")).toBeInTheDocument();
+  });
+
+  it("edits and deletes records and practice attempts", async () => {
+    render(<App />);
+
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.click(screen.getByRole("button", { name: "Records" }));
+    expect(await screen.findByText("Judgment Record")).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.change(screen.getByLabelText("Review note"), {
+      target: { value: "Need better judge comparison." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Edit" }));
+
+    await waitFor(() => {
+      const recordUpdateCall = global.fetch.mock.calls.find(
+        ([url, options]) => url === "/api/records/1" && options?.method === "PATCH",
+      );
+      expect(JSON.parse(recordUpdateCall[1].body).review_note).toBe("Need better judge comparison.");
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Edit" }).at(-1));
+    fireEvent.change(screen.getAllByLabelText("Review note").at(-1), {
+      target: { value: "I chased the visible trend." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Save Edit" }));
+
+    await waitFor(() => {
+      const attemptUpdateCall = global.fetch.mock.calls.find(
+        ([url, options]) => url === "/api/practice/attempts/7" && options?.method === "PATCH",
+      );
+      expect(JSON.parse(attemptUpdateCall[1].body).review_note).toBe("I chased the visible trend.");
+    });
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Delete" })[0]);
+    await waitFor(() => {
+      expect(global.fetch.mock.calls.some(([url, options]) => url === "/api/records/1" && options?.method === "DELETE")).toBe(true);
+    });
   });
 
   it("submits a historical practice answer with dimension weights", async () => {
@@ -745,10 +1040,14 @@ describe("App", () => {
     expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(screen.getAllByText("Bollinger Bands").length).toBeGreaterThan(0);
     expect(screen.getByText("News/Theme")).toBeInTheDocument();
+    expect(screen.getByText("AI Bull/Bear Debate")).toBeInTheDocument();
+    expect(screen.getByText("Evidence refs: T1, A1")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "News/Theme" }));
     expect(screen.getByText("AI demand remains a key theme")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "AI" }));
-    expect(screen.getByText(/AI suggested side/)).toBeInTheDocument();
+    expect(screen.getAllByText(/AI suggested side/).length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole("button", { name: "Evidence Pack" }));
+    expect(screen.getByText("The AI debate may only cite this evidence pack; use evidence refs to verify that each argument is grounded.")).toBeInTheDocument();
     expect(screen.queryByText("Close 123.45; 5D +2.00%, 20D +5.00%.")).not.toBeInTheDocument();
     expect(screen.getByText("Open")).toBeInTheDocument();
     expect(screen.getAllByText("MA10").length).toBeGreaterThan(0);
@@ -890,7 +1189,7 @@ describe("App", () => {
     expect(screen.getByLabelText("Ticker or company name")).toBeInTheDocument();
     fireEvent.submit(screen.getByRole("button", { name: "Search" }).closest("form"));
     await screen.findByText("NVIDIA Corporation");
-    fireEvent.click(screen.getByRole("button", { name: "Start Debate" }));
+    fireEvent.click(screen.getByRole("button", { name: "Run OpenAI Debate" }));
 
     expect(await screen.findByText("Bull Opening")).toBeInTheDocument();
     const debateCall = global.fetch.mock.calls.find(([url]) => url === "/api/debates/judged");

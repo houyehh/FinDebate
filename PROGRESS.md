@@ -1,5 +1,33 @@
 # 開發進度
 
+## 2026-07-21 Portfolio CRUD、Records 復盤與 AI Debate 工作台
+
+### 做了什麼
+- 新增 evidence pack 與 AI Debate 結構，Practice 與 Live Analysis 都會把技術面、基本面與新聞/題材面證據整理成可追溯的資料包。
+- 將工作台的反方檢查改成 AI Debate：包含 Bull/Bear 開場、多空反駁與裁判證據評分；Live Analysis 可在同一個工作台執行 OpenAI 辯論。
+- Portfolio 支援手動新增標的，也可以編輯、刪除決策；欄位包含入場價格、時間、狀態、出場價格、理由與檢討筆記。
+- Records 頁支援編輯/刪除即時判斷與 Practice 作答紀錄，Practice 編輯後會重新計算勝負與教練回饋。
+- 導覽重新整理：標題回到 Home，Home 可選擇練習或即時分析；Live Analysis 移除語意不清的「開始辯論」入口。
+
+### 關鍵決定
+- AI 面的內容品質不靠罐頭文案，而是讓每個 AI 辯論論點綁定 evidence refs，回到實際 price action、技術指標、基本面摘要與新聞/題材線索。
+- Manual portfolio entry 不強制先跑 live analysis，方便使用者補登既有持倉或手動追蹤假想交易。
+- Practice 題目仍保留事後可編輯能力，但編輯作答時會依該題資料重新產生結果與回饋，讓復盤紀錄跟使用者修改後的思考一致。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m py_compile backend\app\practice.py backend\app\live_analysis.py backend\app\database.py backend\app\main.py` 通過。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q` 通過：36 passed。
+- `npm.cmd test -- --run` 通過：13 passed。
+- `npm.cmd run build` 通過。
+- 檢查 `http://127.0.0.1:8020/openapi.json`，確認新 CRUD endpoints 與 AI Debate schema 已在目前後端服務上。
+
+### 遇到問題
+- 本機 `8000` port 仍是舊後端；目前前端 fallback 會優先打 `8020`，展示前建議確認後端使用新版服務，或重啟舊 port 讓它載入最新程式。
+- 前端測試中「AI suggested side」同時出現在多個區塊，已改用多筆查詢避免測試誤判。
+
+### 下一步
+- Demo 可走 Home -> Practice -> AI Debate -> 送出判斷與教練回饋 -> Records 編輯復盤 -> Live Analysis -> Portfolio 新增/追蹤。
+
 ## 2026-07-21 即時分析、投資組合與紀錄頁補強
 
 ### 做了什麼

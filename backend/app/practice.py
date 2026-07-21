@@ -25,6 +25,71 @@ class SnapshotMetric(BaseModel):
     tone: MetricTone = "neutral"
 
 
+class EvidenceItem(BaseModel):
+    evidence_id: str
+    category: Literal["technical", "fundamental", "news", "chip", "ai"]
+    title: str
+    value: str
+    detail: str = ""
+    tone: MetricTone = "neutral"
+    source_name: str = "yfinance"
+    source_url: str = "https://finance.yahoo.com/"
+
+
+class AiDebateClaim(BaseModel):
+    claim_id: str
+    claim: str
+    evidence: str
+    evidence_refs: list[str]
+    source_url: str
+    source_name: str
+
+
+class AiDebateOpeningRound(BaseModel):
+    side: Literal["bull", "bear"]
+    claims: list[AiDebateClaim]
+
+
+class AiDebateRebuttal(BaseModel):
+    target_claim_id: str
+    rebuttal: str
+    evidence: str
+    evidence_refs: list[str]
+    source_url: str
+
+
+class AiDebateRebuttalRound(BaseModel):
+    side: Literal["bull", "bear"]
+    rebuttals: list[AiDebateRebuttal]
+
+
+class AiDebateScore(BaseModel):
+    item_id: str
+    side: Literal["bull", "bear"]
+    item_type: Literal["claim", "rebuttal"]
+    evidence_score: int = Field(ge=1, le=5)
+    source_score: int = Field(ge=1, le=5)
+    logic_score: int = Field(ge=1, le=5)
+    flag: Literal["none", "unverifiable"] = "none"
+    flag_reason: str = ""
+
+
+class AiDebateJudge(BaseModel):
+    scores: list[AiDebateScore]
+    bull_total: int
+    bear_total: int
+    summary: str
+
+
+class AiDebate(BaseModel):
+    bull: AiDebateOpeningRound
+    bear: AiDebateOpeningRound
+    bull_rebuttals: AiDebateRebuttalRound
+    bear_rebuttals: AiDebateRebuttalRound
+    judge: AiDebateJudge
+    source: str = "evidence_pack_ai_debate"
+
+
 class FutureResult(BaseModel):
     horizon_days: int
     settle_date: str
@@ -90,6 +155,8 @@ class PracticeQuestion(BaseModel):
     news_snapshot: list[SnapshotMetric] = []
     chip_snapshot: list[SnapshotMetric] = []
     ai_snapshot: AiSnapshot | None = None
+    evidence_pack: list[EvidenceItem] = []
+    ai_debate: AiDebate | None = None
     data_cutoff_note: str = ""
 
 
@@ -136,6 +203,15 @@ class PracticeAttemptRequest(BaseModel):
     weights: JudgmentWeights = Field(default_factory=JudgmentWeights)
 
 
+class PracticeAttemptUpdateRequest(BaseModel):
+    selected_side: VerdictSide | None = None
+    confidence: int | None = Field(default=None, ge=1, le=5)
+    rationale: str | None = None
+    review_note: str | None = None
+    language: str = "zh-Hant"
+    weights: JudgmentWeights | None = None
+
+
 class PracticeAttemptRecord(BaseModel):
     id: int
     question_id: str
@@ -151,6 +227,7 @@ class PracticeAttemptRecord(BaseModel):
     ai_side: VerdictSide | None = None
     ai_agreement: bool | None = None
     future_results: list[FutureResult] = []
+    review_note: str = ""
     created_at: str
 
 
@@ -177,6 +254,10 @@ class PracticeDashboardResponse(BaseModel):
 
 
 class PracticeQuestionNotFoundError(ValueError):
+    pass
+
+
+class PracticeAttemptNotFoundError(ValueError):
     pass
 
 
@@ -343,6 +424,81 @@ def submit_practice_attempt(request: PracticeAttemptRequest) -> PracticeAttemptR
     )
 
 
+def update_practice_attempt(attempt_id: int, request: PracticeAttemptUpdateRequest) -> PracticeAttemptRecord:
+    init_db()
+    with connect() as connection:
+        row = connection.execute("SELECT * FROM practice_attempts WHERE id = ?", (attempt_id,)).fetchone()
+        if row is None:
+            raise PracticeAttemptNotFoundError(f"Practice attempt {attempt_id} was not found.")
+
+        selected_side = request.selected_side or row["selected_side"]
+        confidence = request.confidence if request.confidence is not None else row["confidence"]
+        rationale = row["rationale"] if request.rationale is None else request.rationale
+        review_note = row["review_note"] if "review_note" in row.keys() and request.review_note is None else (request.review_note or "")
+        weights = request.weights or _weights_from_json(row["weights_json"])
+        if _weight_total(weights) != 100:
+            raise PracticeValidationError("Judgment weights must add up to 100.")
+
+        try:
+            case = _case_by_id(row["question_id"])
+            answer_side = case.answer_side
+            outcome_pct = case.outcome_pct
+            ai_side = case.ai_snapshot.suggested_side if case.ai_snapshot else row["ai_side"]
+            ai_agreement = selected_side == ai_side if ai_side else None
+            feedback = analyze_practice_attempt(
+                case=case,
+                selected_side=selected_side,
+                confidence=confidence,
+                rationale=rationale,
+                weights=weights,
+                language=request.language,
+            )
+        except PracticeQuestionNotFoundError:
+            answer_side = row["answer_side"]
+            outcome_pct = row["outcome_pct"]
+            ai_side = row["ai_side"]
+            ai_agreement = None if row["ai_agreement"] is None else selected_side == ai_side
+            feedback = _feedback_from_json(row["feedback_json"])
+
+        result: PracticeResult = "correct" if selected_side == answer_side else "wrong"
+        connection.execute(
+            """
+            UPDATE practice_attempts
+            SET selected_side = ?, confidence = ?, rationale = ?, answer_side = ?,
+                outcome_pct = ?, result = ?, feedback_json = ?, weights_json = ?,
+                ai_side = ?, ai_agreement = ?, review_note = ?
+            WHERE id = ?
+            """,
+            (
+                selected_side,
+                confidence,
+                rationale,
+                answer_side,
+                outcome_pct,
+                result,
+                feedback.model_dump_json(),
+                weights.model_dump_json(),
+                ai_side,
+                int(ai_agreement) if ai_agreement is not None else None,
+                review_note,
+                attempt_id,
+            ),
+        )
+
+    updated = _practice_attempt_by_id(attempt_id)
+    if updated is None:
+        raise PracticeAttemptNotFoundError(f"Practice attempt {attempt_id} was not found.")
+    return updated
+
+
+def delete_practice_attempt(attempt_id: int) -> None:
+    init_db()
+    with connect() as connection:
+        cursor = connection.execute("DELETE FROM practice_attempts WHERE id = ?", (attempt_id,))
+        if cursor.rowcount == 0:
+            raise PracticeAttemptNotFoundError(f"Practice attempt {attempt_id} was not found.")
+
+
 def analyze_practice_attempt(
     case: PracticeCase,
     selected_side: VerdictSide,
@@ -485,6 +641,22 @@ def _case_from_points(
     ai_snapshot = _ai_snapshot(ticker, selected, window, technical_snapshot, fundamental_snapshot, chip_snapshot)
     bull_points, bear_points = _factor_clues(selected, window, ai_snapshot, False)
     bull_points_zh, bear_points_zh = _factor_clues(selected, window, ai_snapshot, True)
+    evidence_pack = build_evidence_pack(
+        ticker,
+        technical_snapshot,
+        fundamental_snapshot,
+        news_snapshot,
+        chip_snapshot,
+        ai_snapshot,
+    )
+    ai_debate = build_ai_debate(
+        ticker,
+        evidence_pack,
+        bull_points_zh if language.startswith("zh") else bull_points,
+        bear_points_zh if language.startswith("zh") else bear_points,
+        ai_snapshot,
+        language.startswith("zh"),
+    )
     question_id = f"history-{ticker}-{selected.date}-{horizon}d-{random.randint(1000, 9999)}"
     currency = _currency_for_ticker(ticker)
     title = f"Historical snapshot: {ticker} on {selected.date}"
@@ -537,6 +709,8 @@ def _case_from_points(
         news_snapshot=news_snapshot,
         chip_snapshot=chip_snapshot,
         ai_snapshot=ai_snapshot,
+        evidence_pack=evidence_pack,
+        ai_debate=ai_debate,
         data_cutoff_note=data_note,
         data_cutoff_note_zh=data_note_zh,
         answer_side=answer_side,
@@ -1021,6 +1195,298 @@ def localized_ai_snapshot(
     )
 
 
+def build_evidence_pack(
+    ticker: str,
+    technical: list[SnapshotMetric],
+    fundamental: list[SnapshotMetric],
+    news: list[SnapshotMetric],
+    chip: list[SnapshotMetric],
+    ai: AiSnapshot | None,
+) -> list[EvidenceItem]:
+    evidence: list[EvidenceItem] = []
+    evidence.extend(_metric_evidence_items(ticker, "technical", "T", technical))
+    evidence.extend(_metric_evidence_items(ticker, "fundamental", "F", fundamental))
+    evidence.extend(_metric_evidence_items(ticker, "news", "N", news))
+    evidence.extend(_metric_evidence_items(ticker, "chip", "C", chip))
+
+    if ai is not None:
+        source_url = _finance_source_url(ticker)
+        evidence.extend(
+            [
+                EvidenceItem(
+                    evidence_id="A1",
+                    category="ai",
+                    title="AI suggested side",
+                    value=_side_label(ai.suggested_side, False),
+                    detail=f"Confidence {ai.confidence}/5. {ai.narrative}",
+                    tone=ai.suggested_side if ai.suggested_side in {"bull", "bear"} else "neutral",
+                    source_name=ai.source,
+                    source_url=source_url,
+                ),
+                EvidenceItem(
+                    evidence_id="A2",
+                    category="ai",
+                    title="AI bull thesis",
+                    value=ai.bull_thesis,
+                    detail=ai.key_uncertainty,
+                    tone="bull",
+                    source_name=ai.source,
+                    source_url=source_url,
+                ),
+                EvidenceItem(
+                    evidence_id="A3",
+                    category="ai",
+                    title="AI bear thesis",
+                    value=ai.bear_thesis,
+                    detail=ai.key_uncertainty,
+                    tone="bear",
+                    source_name=ai.source,
+                    source_url=source_url,
+                ),
+            ]
+        )
+
+    return evidence
+
+
+def build_ai_debate(
+    ticker: str,
+    evidence_pack: list[EvidenceItem],
+    bull_points: list[str],
+    bear_points: list[str],
+    ai: AiSnapshot | None,
+    zh: bool,
+) -> AiDebate:
+    bull_refs = _pick_evidence_refs(evidence_pack, {"bull"}, fallback_tones={"neutral"})
+    bear_refs = _pick_evidence_refs(evidence_pack, {"bear", "warn"}, fallback_tones={"neutral"})
+    if ai is not None:
+        bull_refs = _dedupe([*bull_refs, "A1", "A2"])[:4]
+        bear_refs = _dedupe([*bear_refs, "A3"])[:4]
+
+    bull = AiDebateOpeningRound(
+        side="bull",
+        claims=_debate_claims(
+            ticker=ticker,
+            side="bull",
+            points=bull_points,
+            refs=bull_refs,
+            evidence_pack=evidence_pack,
+            zh=zh,
+        ),
+    )
+    bear = AiDebateOpeningRound(
+        side="bear",
+        claims=_debate_claims(
+            ticker=ticker,
+            side="bear",
+            points=bear_points,
+            refs=bear_refs,
+            evidence_pack=evidence_pack,
+            zh=zh,
+        ),
+    )
+    bull_rebuttals = AiDebateRebuttalRound(
+        side="bull",
+        rebuttals=_debate_rebuttals("bull", bear.claims, bull_refs, evidence_pack, zh),
+    )
+    bear_rebuttals = AiDebateRebuttalRound(
+        side="bear",
+        rebuttals=_debate_rebuttals("bear", bull.claims, bear_refs, evidence_pack, zh),
+    )
+    scores = _ai_debate_scores(bull, bear, bull_rebuttals, bear_rebuttals)
+    bull_total = sum(score.evidence_score + score.source_score + score.logic_score for score in scores if score.side == "bull")
+    bear_total = sum(score.evidence_score + score.source_score + score.logic_score for score in scores if score.side == "bear")
+    if zh:
+        summary = (
+            f"AI 辯論只引用本題 evidence pack。多方 {bull_total} 分、空方 {bear_total} 分；"
+            "分數代表證據密度與推論品質，不是投資結論。請先寫自己的理由，再用反方論點檢查盲點。"
+        )
+    else:
+        summary = (
+            f"AI debate only cites this question's evidence pack. Bull scores {bull_total}, bear scores {bear_total}; "
+            "scores reflect evidence density and logic quality, not an investment conclusion. Decide first, then use the opposite case to audit blind spots."
+        )
+
+    return AiDebate(
+        bull=bull,
+        bear=bear,
+        bull_rebuttals=bull_rebuttals,
+        bear_rebuttals=bear_rebuttals,
+        judge=AiDebateJudge(scores=scores, bull_total=bull_total, bear_total=bear_total, summary=summary),
+    )
+
+
+def _metric_evidence_items(
+    ticker: str,
+    category: Literal["technical", "fundamental", "news", "chip"],
+    prefix: str,
+    metrics: list[SnapshotMetric],
+) -> list[EvidenceItem]:
+    return [
+        EvidenceItem(
+            evidence_id=f"{prefix}{index + 1}",
+            category=category,
+            title=metric.label,
+            value=metric.value,
+            detail=metric.detail,
+            tone=metric.tone,
+            source_name="Yahoo Finance / yfinance",
+            source_url=_finance_source_url(ticker),
+        )
+        for index, metric in enumerate(metrics[:4])
+    ]
+
+
+def _pick_evidence_refs(
+    evidence_pack: list[EvidenceItem],
+    tones: set[str],
+    fallback_tones: set[str],
+    limit: int = 4,
+) -> list[str]:
+    refs = [item.evidence_id for item in evidence_pack if item.tone in tones]
+    if len(refs) < limit:
+        refs.extend(item.evidence_id for item in evidence_pack if item.tone in fallback_tones)
+    return _dedupe(refs)[:limit]
+
+
+def _debate_claims(
+    ticker: str,
+    side: Literal["bull", "bear"],
+    points: list[str],
+    refs: list[str],
+    evidence_pack: list[EvidenceItem],
+    zh: bool,
+) -> list[AiDebateClaim]:
+    fallback = (
+        [
+            f"{ticker} 的價格動能仍可支持看多假設。",
+            "基本面或題材面仍有機會支撐評價。",
+            "AI 面提供可檢查的正向假設，但需要硬資料驗證。",
+        ]
+        if side == "bull" and zh
+        else [
+            f"{ticker} price momentum can still support the bullish case.",
+            "Fundamental or theme evidence can still support valuation.",
+            "The AI view provides a positive hypothesis, but it must be validated with hard evidence.",
+        ]
+        if side == "bull"
+        else [
+            f"{ticker} 的利多可能已部分反映在價格裡。",
+            "技術或估值訊號可能提示追價風險。",
+            "AI 面可能過度貼合已知趨勢，需要反向驗證。",
+        ]
+        if zh
+        else [
+            f"{ticker} good news may already be partly priced in.",
+            "Technical or valuation signals may warn against chasing.",
+            "The AI view may overfit visible trends and needs counter-validation.",
+        ]
+    )
+    selected_points = (points + fallback)[:3]
+    source = _first_evidence(evidence_pack, refs)
+    side_prefix = side.upper()
+    return [
+        AiDebateClaim(
+            claim_id=f"{side_prefix}-{index + 1}",
+            claim=point,
+            evidence=_evidence_sentence(evidence_pack, refs, zh),
+            evidence_refs=refs,
+            source_url=source.source_url if source else _finance_source_url(ticker),
+            source_name=source.source_name if source else "Yahoo Finance / yfinance",
+        )
+        for index, point in enumerate(selected_points)
+    ]
+
+
+def _debate_rebuttals(
+    side: Literal["bull", "bear"],
+    opponent_claims: list[AiDebateClaim],
+    refs: list[str],
+    evidence_pack: list[EvidenceItem],
+    zh: bool,
+) -> list[AiDebateRebuttal]:
+    source = _first_evidence(evidence_pack, refs)
+    rebuttals: list[AiDebateRebuttal] = []
+    for index, target in enumerate(opponent_claims[:2]):
+        if side == "bull":
+            rebuttal = (
+                f"多方反駁：#{target.claim_id} 的風險成立，但若 {refs[0] if refs else '核心證據'} 仍改善，空方結論需要降權。"
+                if zh
+                else f"Bull rebuttal: #{target.claim_id} is a real risk, but if {refs[0] if refs else 'core evidence'} keeps improving, the bear conclusion should be discounted."
+            )
+        else:
+            rebuttal = (
+                f"空方反駁：#{target.claim_id} 不能只看正面敘事；若 {refs[0] if refs else '反向證據'} 轉弱，追多假設會失效。"
+                if zh
+                else f"Bear rebuttal: #{target.claim_id} cannot rely on positive narrative alone; if {refs[0] if refs else 'counter-evidence'} weakens, the bullish setup fails."
+            )
+        rebuttals.append(
+            AiDebateRebuttal(
+                target_claim_id=target.claim_id,
+                rebuttal=rebuttal,
+                evidence=_evidence_sentence(evidence_pack, refs, zh),
+                evidence_refs=refs,
+                source_url=source.source_url if source else "https://finance.yahoo.com/",
+            )
+        )
+    return rebuttals
+
+
+def _ai_debate_scores(
+    bull: AiDebateOpeningRound,
+    bear: AiDebateOpeningRound,
+    bull_rebuttals: AiDebateRebuttalRound,
+    bear_rebuttals: AiDebateRebuttalRound,
+) -> list[AiDebateScore]:
+    scores: list[AiDebateScore] = []
+    for round_ in [bull, bear]:
+        for claim in round_.claims:
+            evidence_score = min(5, max(2, len(claim.evidence_refs) + 1))
+            scores.append(
+                AiDebateScore(
+                    item_id=claim.claim_id,
+                    side=round_.side,
+                    item_type="claim",
+                    evidence_score=evidence_score,
+                    source_score=4,
+                    logic_score=4,
+                )
+            )
+    for round_ in [bull_rebuttals, bear_rebuttals]:
+        for index, rebuttal in enumerate(round_.rebuttals, start=1):
+            evidence_score = min(5, max(2, len(rebuttal.evidence_refs) + 1))
+            scores.append(
+                AiDebateScore(
+                    item_id=f"{round_.side.upper()}-REB-{index}",
+                    side=round_.side,
+                    item_type="rebuttal",
+                    evidence_score=evidence_score,
+                    source_score=4,
+                    logic_score=3,
+                )
+            )
+    return scores
+
+
+def _first_evidence(evidence_pack: list[EvidenceItem], refs: list[str]) -> EvidenceItem | None:
+    ref_set = set(refs)
+    return next((item for item in evidence_pack if item.evidence_id in ref_set), None)
+
+
+def _evidence_sentence(evidence_pack: list[EvidenceItem], refs: list[str], zh: bool) -> str:
+    items = [item for item in evidence_pack if item.evidence_id in set(refs)]
+    if not items:
+        return "本論點需要更多可驗證資料。" if zh else "This claim needs more verifiable data."
+    snippets = [f"{item.evidence_id} {item.title}: {item.value}" for item in items[:3]]
+    if zh:
+        return "引用證據：" + "；".join(snippets)
+    return "Evidence cited: " + "; ".join(snippets)
+
+
+def _finance_source_url(ticker: str) -> str:
+    return f"https://finance.yahoo.com/quote/{ticker}/"
+
+
 def _indicator_summary(point: MarketIndicatorPoint, window: list[MarketIndicatorPoint], zh: bool) -> list[str]:
     pct5 = _window_pct(window, 5)
     pct20 = _window_pct(window, 20)
@@ -1140,6 +1606,24 @@ def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
             ).model_dump(mode="json")
     elif case.market_window:
         data["indicator_summary"] = _indicator_summary(case.market_window[-1], case.market_window, False)
+    public_ai = AiSnapshot.model_validate(data["ai_snapshot"]) if data.get("ai_snapshot") else None
+    evidence_pack = build_evidence_pack(
+        case.ticker,
+        case.technical_snapshot,
+        case.fundamental_snapshot,
+        case.news_snapshot,
+        case.chip_snapshot,
+        public_ai,
+    )
+    data["evidence_pack"] = [item.model_dump(mode="json") for item in evidence_pack]
+    data["ai_debate"] = build_ai_debate(
+        case.ticker,
+        evidence_pack,
+        data.get("bull_points", case.bull_points),
+        data.get("bear_points", case.bear_points),
+        public_ai,
+        language.startswith("zh"),
+    ).model_dump(mode="json")
     return PracticeQuestion(**data)
 
 
@@ -1196,6 +1680,12 @@ def _recent_attempts(limit: int = 5) -> list[PracticeAttemptRecord]:
             (limit,),
         ).fetchall()
     return [_attempt_from_row(row) for row in rows]
+
+
+def _practice_attempt_by_id(attempt_id: int) -> PracticeAttemptRecord | None:
+    with connect() as connection:
+        row = connection.execute("SELECT * FROM practice_attempts WHERE id = ?", (attempt_id,)).fetchone()
+    return _attempt_from_row(row) if row is not None else None
 
 
 def _practice_stats() -> PracticeStats:
@@ -1268,6 +1758,7 @@ def _attempt_from_row(row) -> PracticeAttemptRecord:
         ai_side=row["ai_side"],
         ai_agreement=ai_agreement,
         future_results=future_results,
+        review_note=row["review_note"] if "review_note" in row.keys() else "",
         created_at=row["created_at"],
     )
 

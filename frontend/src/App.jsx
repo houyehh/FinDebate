@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 
 import { dictionaries } from "./i18n";
 
@@ -386,6 +386,58 @@ function App() {
     }
   }
 
+  async function createPortfolioDecision(payload) {
+    const { response, data } = await fetchApiWithFallback(
+      "/api/portfolio/decisions",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      t.portfolioCreateFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.portfolioCreateFailed));
+    }
+
+    await fetchPortfolio();
+    return data;
+  }
+
+  async function updatePortfolioDecision(decisionId, payload) {
+    const { response, data } = await fetchApiWithFallback(
+      `/api/portfolio/decisions/${decisionId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      t.portfolioUpdateFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.portfolioUpdateFailed));
+    }
+
+    await fetchPortfolio();
+    return data;
+  }
+
+  async function deletePortfolioDecision(decisionId) {
+    const { response, data } = await fetchApiWithFallback(
+      `/api/portfolio/decisions/${decisionId}`,
+      { method: "DELETE" },
+      t.portfolioDeleteFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.portfolioDeleteFailed));
+    }
+
+    await fetchPortfolio();
+  }
+
   async function fetchLiveAnalysis(rawTicker) {
     const normalizedTicker = rawTicker.trim();
     if (!normalizedTicker) {
@@ -488,6 +540,72 @@ function App() {
     return data;
   }
 
+  async function updatePracticeAttempt(attemptId, payload) {
+    const { response, data } = await fetchPracticeApi(
+      `/api/practice/attempts/${attemptId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, language }),
+      },
+      t.practiceUpdateFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.practiceUpdateFailed));
+    }
+
+    await fetchPractice({ silent: true, refreshRandom: false });
+    return data;
+  }
+
+  async function deletePracticeAttempt(attemptId) {
+    const { response, data } = await fetchPracticeApi(
+      `/api/practice/attempts/${attemptId}`,
+      { method: "DELETE" },
+      t.practiceDeleteFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.practiceDeleteFailed));
+    }
+
+    await fetchPractice({ silent: true, refreshRandom: false });
+  }
+
+  async function updateVerdictRecord(recordId, payload) {
+    const { response, data } = await fetchApiWithFallback(
+      `/api/records/${recordId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      t.recordUpdateFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.recordUpdateFailed));
+    }
+
+    await fetchRecords();
+    return data;
+  }
+
+  async function deleteVerdictRecord(recordId) {
+    const { response, data } = await fetchApiWithFallback(
+      `/api/records/${recordId}`,
+      { method: "DELETE" },
+      t.recordDeleteFailed,
+    );
+
+    if (!response.ok) {
+      throw new Error(apiErrorMessage(data, t.recordDeleteFailed));
+    }
+
+    await fetchRecords();
+  }
+
   async function handleStartDebate() {
     if (!snapshot) {
       return;
@@ -550,31 +668,17 @@ function App() {
     setLiveDecisionError("");
 
     try {
-      const { response, data } = await fetchApiWithFallback(
-        "/api/portfolio/decisions",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ticker: liveAnalysis.ticker,
-            side: liveSide,
-            confidence: liveConfidence,
-            rationale: liveRationale,
-            language,
-            weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
-            analysis: liveAnalysis,
-          }),
-        },
-        t.liveDecisionFailed,
-      );
-
-      if (!response.ok) {
-        throw new Error(apiErrorMessage(data, t.liveDecisionFailed));
-      }
-
+      const data = await createPortfolioDecision({
+        ticker: liveAnalysis.ticker,
+        side: liveSide,
+        confidence: liveConfidence,
+        rationale: liveRationale,
+        language,
+        weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
+        analysis: liveAnalysis,
+      });
       setLiveDecisionSaved(data);
       setLiveDecisionState("saved");
-      await fetchPortfolio();
     } catch (decisionError) {
       setLiveDecisionError(decisionError.message);
       setLiveDecisionState("error");
@@ -667,19 +771,14 @@ function App() {
       <nav className="border-b border-zinc-800 bg-zinc-950/90">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-5">
           <div className="flex items-center gap-6">
-            <span className="text-lg font-semibold tracking-wide">{t.brandName}</span>
+            <button
+              type="button"
+              onClick={() => setActivePage("home")}
+              className="text-left text-lg font-semibold tracking-wide text-zinc-100 transition hover:text-amber-200"
+            >
+              {t.brandName}
+            </button>
             <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setActivePage("practice")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "practice"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
-              >
-                {t.navPractice}
-              </button>
               <button
                 type="button"
                 onClick={() => setActivePage("home")}
@@ -693,14 +792,24 @@ function App() {
               </button>
               <button
                 type="button"
-                onClick={() => setActivePage("records")}
+                onClick={() => setActivePage("practice")}
                 className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "records"
+                  activePage === "practice"
                     ? "bg-zinc-800 text-amber-200"
                     : "text-zinc-400 hover:text-zinc-100"
                 }`}
               >
-                {t.navRecords}
+                {t.navPractice}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setActivePage("home");
+                  window.setTimeout(() => document.getElementById("ticker-input")?.focus(), 0);
+                }}
+                className="rounded px-3 py-1 text-sm text-zinc-400 transition hover:text-zinc-100"
+              >
+                {t.navLiveAnalysis}
               </button>
               <button
                 type="button"
@@ -712,6 +821,17 @@ function App() {
                 }`}
               >
                 {t.navPortfolio}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("records")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "records"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                {t.navRecords}
               </button>
             </div>
           </div>
@@ -893,14 +1013,6 @@ function App() {
                 >
                   {liveState === "loading" ? t.loadingLiveAnalysis : t.liveRunAnalysis}
                 </button>
-                <button
-                  type="button"
-                  onClick={handleStartDebate}
-                  disabled={debateState === "loading"}
-                  className="h-12 rounded border border-amber-300 px-5 font-semibold text-amber-100 transition hover:bg-amber-950/30 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500"
-                >
-                  {debateState === "loading" ? t.researching : t.startDebate}
-                </button>
               </div>
             </>
           ) : (
@@ -940,82 +1052,13 @@ function App() {
           decisionError={liveDecisionError}
           decisionSaved={liveDecisionSaved}
           onSubmitDecision={handleSubmitLiveDecision}
+          debate={debate}
+          debateState={debateState}
+          debateError={debateError}
+          onStartDebate={handleStartDebate}
           language={language}
           t={t}
         />
-      ) : null}
-
-      {debateState === "loading" ? (
-        <section className="mx-auto max-w-6xl px-8 pb-12">
-          <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
-            {t.researchStatus}
-          </div>
-        </section>
-      ) : null}
-
-      {debateError ? (
-        <section className="mx-auto max-w-6xl px-8 pb-12">
-          <div className="rounded-lg border border-red-400/40 bg-red-950/40 p-5 text-red-100">
-            {debateError}
-          </div>
-        </section>
-      ) : null}
-
-      {debate ? (
-        <>
-          {judgeRevealed ? (
-            <section className="mx-auto max-w-6xl px-8 pb-8">
-              <JudgeScoreboard judge={debate.judge} verdictResult={verdictResult} t={t} />
-            </section>
-          ) : (
-            <section className="mx-auto max-w-6xl px-8 pb-8">
-              <VerdictPanel
-                side={verdictSide}
-                setSide={setVerdictSide}
-                confidence={confidence}
-                setConfidence={setConfidence}
-                note={note}
-                setNote={setNote}
-                state={verdictState}
-                onSubmit={handleSubmitVerdict}
-                onSkip={() => setJudgeRevealed(true)}
-                t={t}
-              />
-            </section>
-          )}
-          <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-10">
-            <OpeningColumn
-              title={t.bullOpening}
-              tone="bull"
-              claims={debate.bull.claims}
-              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
-              t={t}
-            />
-            <OpeningColumn
-              title={t.bearOpening}
-              tone="bear"
-              claims={debate.bear.claims}
-              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
-              t={t}
-            />
-          </section>
-          <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 pb-16">
-            <RebuttalColumn
-              title={t.bullRebuttal}
-              tone="bull"
-              rebuttals={debate.bull_rebuttals.rebuttals}
-              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
-              t={t}
-            />
-            <RebuttalColumn
-              title={t.bearRebuttal}
-              tone="bear"
-              rebuttals={debate.bear_rebuttals.rebuttals}
-              scoreMap={judgeRevealed ? buildScoreMap(debate.judge) : {}}
-              t={t}
-            />
-          </section>
-        </>
       ) : null}
         </>
       ) : activePage === "records" ? (
@@ -1025,6 +1068,10 @@ function App() {
           error={recordsError}
           practiceData={practiceData}
           practiceState={practiceState}
+          onUpdateRecord={updateVerdictRecord}
+          onDeleteRecord={deleteVerdictRecord}
+          onUpdatePracticeAttempt={updatePracticeAttempt}
+          onDeletePracticeAttempt={deletePracticeAttempt}
           onRefresh={() => {
             fetchRecords();
             fetchPractice({ silent: true, refreshRandom: false });
@@ -1037,6 +1084,9 @@ function App() {
           data={portfolioData}
           error={portfolioError}
           onRefresh={fetchPortfolio}
+          onCreate={createPortfolioDecision}
+          onUpdate={updatePortfolioDecision}
+          onDelete={deletePortfolioDecision}
           language={language}
           t={t}
         />
@@ -1163,7 +1213,7 @@ function VerdictPanel({
   );
 }
 
-function JudgeScoreboard({ judge, verdictResult, t }) {
+function JudgeScoreboard({ judge, verdictResult, t, showVerdictStatus = true }) {
   const maxTotal = Math.max(judge.bull_total, judge.bear_total, 1);
   const bullWidth = `${(judge.bull_total / maxTotal) * 100}%`;
   const bearWidth = `${(judge.bear_total / maxTotal) * 100}%`;
@@ -1198,11 +1248,11 @@ function JudgeScoreboard({ judge, verdictResult, t }) {
               ? t.bearSide
               : t.neutralSide}
         </p>
-      ) : (
+      ) : showVerdictStatus ? (
         <p className="mt-4 rounded border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-300">
           {t.skipped}
         </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -1226,6 +1276,11 @@ function OpeningColumn({ title, tone, claims, scoreMap, t }) {
             <p className="text-sm font-semibold text-zinc-400">#{claim.claim_id}</p>
             <h3 className="mt-2 text-lg font-semibold text-zinc-100">{claim.claim}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{claim.evidence}</p>
+            {claim.evidence_refs?.length ? (
+              <p className="mt-3 text-xs text-zinc-500">
+                {t.evidenceRefs}: {claim.evidence_refs.join(", ")}
+              </p>
+            ) : null}
             <ScoreStrip score={scoreMap[claim.claim_id]} t={t} />
             <a
               className="mt-4 inline-block text-sm text-amber-200 underline-offset-4 hover:underline"
@@ -1267,6 +1322,11 @@ function RebuttalColumn({ title, tone, rebuttals, scoreMap, t }) {
             </a>
             <h3 className="mt-3 text-lg font-semibold text-zinc-100">{rebuttal.rebuttal}</h3>
             <p className="mt-3 text-sm leading-6 text-zinc-300">{rebuttal.evidence}</p>
+            {rebuttal.evidence_refs?.length ? (
+              <p className="mt-3 text-xs text-zinc-500">
+                {t.evidenceRefs}: {rebuttal.evidence_refs.join(", ")}
+              </p>
+            ) : null}
             <ScoreStrip score={scoreMap[itemId]} t={t} />
             <a
               className="mt-4 inline-block break-all text-sm text-amber-200 underline-offset-4 hover:underline"
@@ -1315,6 +1375,10 @@ function LiveAnalysisWorkbench({
   decisionError,
   decisionSaved,
   onSubmitDecision,
+  debate,
+  debateState,
+  debateError,
+  onStartDebate,
   language,
   t,
 }) {
@@ -1384,10 +1448,14 @@ function LiveAnalysisWorkbench({
           />
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-5">
-          <PracticeClueList title={t.practiceBullClues} tone="bull" items={analysis.bull_points || []} />
-          <PracticeClueList title={t.practiceBearClues} tone="bear" items={analysis.bear_points || []} />
-        </div>
+        <AiDebatePanel
+          aiDebate={analysis.ai_debate}
+          judgedDebate={debate}
+          onStartDebate={onStartDebate}
+          debateState={debateState}
+          debateError={debateError}
+          t={t}
+        />
       </section>
 
       <LiveDecisionPanel
@@ -1743,10 +1811,7 @@ function PracticePage({
           />
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-5">
-          <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
-          <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points} />
-        </div>
+        <AiDebatePanel aiDebate={question.ai_debate} t={t} />
 
         <p className="mt-6 border border-amber-300/30 bg-amber-950/20 p-4 text-sm text-amber-100">
           {question.prompt}
@@ -1898,7 +1963,7 @@ function EvidenceTabs({ activeTab, setActiveTab, question, t }) {
     ["fundamental", t.fundamentalDimension],
     ["news", t.newsDimension],
     ["ai", t.aiDimension],
-    ["counter", t.counterEvidence],
+    ["evidence", t.evidencePack],
   ];
 
   return (
@@ -1928,15 +1993,7 @@ function EvidenceTabs({ activeTab, setActiveTab, question, t }) {
           <MetricPanel title={t.newsDimension} metrics={question.news_snapshot || []} />
         ) : null}
         {activeTab === "ai" ? <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} /> : null}
-        {activeTab === "counter" ? (
-          <div>
-            <p className="text-sm leading-6 text-zinc-400">{t.counterEvidenceLead}</p>
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points || []} />
-              <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points || []} />
-            </div>
-          </div>
-        ) : null}
+        {activeTab === "evidence" ? <EvidencePackPanel evidence={question.evidence_pack || []} t={t} /> : null}
       </div>
     </div>
   );
@@ -2018,6 +2075,107 @@ function AiSnapshotPanel({ snapshot, t }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EvidencePackPanel({ evidence, t }) {
+  if (!evidence?.length) {
+    return <p className="text-sm text-zinc-500">{t.noEvidencePack}</p>;
+  }
+
+  return (
+    <div>
+      <p className="text-sm leading-6 text-zinc-400">{t.evidencePackLead}</p>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        {evidence.map((item) => (
+          <article key={item.evidence_id} className="rounded border border-zinc-800 bg-zinc-900 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold text-amber-200">{item.evidence_id} · {item.category}</p>
+                <h4 className="mt-1 text-sm font-semibold text-zinc-100">{item.title}</h4>
+              </div>
+              <span className={`text-xs font-semibold ${metricToneClass(item.tone)}`}>{item.value}</span>
+            </div>
+            {item.detail ? <p className="mt-2 text-xs leading-5 text-zinc-400">{item.detail}</p> : null}
+          </article>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiDebatePanel({
+  aiDebate,
+  judgedDebate = null,
+  onStartDebate = null,
+  debateState = "idle",
+  debateError = "",
+  t,
+}) {
+  const debate = judgedDebate || aiDebate;
+  if (!debate) {
+    return null;
+  }
+  const scoreMap = debate.judge ? buildScoreMap(debate.judge) : {};
+
+  return (
+    <section className="mt-8 border-t border-zinc-800 pt-6">
+      <div className="mb-5 flex items-start justify-between gap-6">
+        <div>
+          <p className="text-sm uppercase text-amber-200">{t.aiDebateKicker}</p>
+          <h2 className="mt-2 text-2xl font-semibold">{t.aiDebateTitle}</h2>
+          <p className="mt-2 max-w-4xl text-sm leading-6 text-zinc-400">{t.aiDebateLead}</p>
+        </div>
+        {onStartDebate ? (
+          <button
+            type="button"
+            onClick={onStartDebate}
+            disabled={debateState === "loading"}
+            className="shrink-0 rounded border border-amber-300 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-950/30 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500"
+          >
+            {debateState === "loading" ? t.researching : judgedDebate ? t.refreshAiDebate : t.runAiDebate}
+          </button>
+        ) : null}
+      </div>
+
+      {debateState === "loading" ? (
+        <div className="mb-5 rounded border border-amber-300/40 bg-amber-950/20 p-4 text-sm text-amber-100">
+          {t.researchStatus}
+        </div>
+      ) : null}
+      {debateError ? (
+        <div className="mb-5 rounded border border-red-400/40 bg-red-950/40 p-4 text-sm text-red-100">
+          {debateError}
+        </div>
+      ) : null}
+
+      {debate.judge ? (
+        <div className="mb-6">
+          <JudgeScoreboard judge={debate.judge} verdictResult={null} t={t} showVerdictStatus={false} />
+        </div>
+      ) : null}
+
+      <div className="grid grid-cols-2 gap-5">
+        <OpeningColumn title={t.bullOpening} tone="bull" claims={debate.bull.claims} scoreMap={scoreMap} t={t} />
+        <OpeningColumn title={t.bearOpening} tone="bear" claims={debate.bear.claims} scoreMap={scoreMap} t={t} />
+      </div>
+      <div className="mt-5 grid grid-cols-2 gap-5">
+        <RebuttalColumn
+          title={t.bullRebuttal}
+          tone="bull"
+          rebuttals={debate.bull_rebuttals.rebuttals}
+          scoreMap={scoreMap}
+          t={t}
+        />
+        <RebuttalColumn
+          title={t.bearRebuttal}
+          tone="bear"
+          rebuttals={debate.bear_rebuttals.rebuttals}
+          scoreMap={scoreMap}
+          t={t}
+        />
+      </div>
+    </section>
   );
 }
 
@@ -2688,7 +2846,70 @@ function OpenAISettingsPage({
   );
 }
 
-function PortfolioPage({ state, data, error, onRefresh, language, t }) {
+function LabeledInput({ label, value, onChange, type = "text", ...props }) {
+  return (
+    <label className="block text-xs text-zinc-400">
+      <span>{label}</span>
+      <input
+        type={type}
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-10 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none transition focus:border-amber-300"
+        {...props}
+      />
+    </label>
+  );
+}
+
+function LabeledSelect({ label, value, onChange, options }) {
+  return (
+    <label className="block text-xs text-zinc-400">
+      <span>{label}</span>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-10 w-full rounded border border-zinc-700 bg-zinc-950 px-3 text-sm text-zinc-100 outline-none transition focus:border-amber-300"
+      >
+        {options.map(([optionValue, optionLabel]) => (
+          <option key={optionValue} value={optionValue}>
+            {optionLabel}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LabeledTextarea({ label, value, onChange }) {
+  return (
+    <label className="block text-xs text-zinc-400">
+      <span>{label}</span>
+      <textarea
+        value={value ?? ""}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 h-20 w-full resize-none rounded border border-zinc-700 bg-zinc-950 p-3 text-sm text-zinc-100 outline-none transition focus:border-amber-300"
+      />
+    </label>
+  );
+}
+
+function PortfolioPage({ state, data, error, onRefresh, onCreate, onUpdate, onDelete, language, t }) {
+  const [manualForm, setManualForm] = useState({
+    ticker: "NVDA",
+    side: "bull",
+    confidence: 3,
+    entry_price: "",
+    currency: "USD",
+    created_at: "",
+    status: "open",
+    rationale: "",
+    review_note: "",
+  });
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState(null);
+  const [actionState, setActionState] = useState("idle");
+  const [actionError, setActionError] = useState("");
+
   if (state === "loading" && !data) {
     return (
       <section className="mx-auto max-w-6xl px-8 py-12">
@@ -2712,6 +2933,100 @@ function PortfolioPage({ state, data, error, onRefresh, language, t }) {
   const stats = data?.stats;
   const decisions = data?.decisions || [];
 
+  function setManualField(key, value) {
+    setManualForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function setEditField(key, value) {
+    setEditForm((current) => ({ ...current, [key]: value }));
+  }
+
+  async function submitManualDecision(event) {
+    event.preventDefault();
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onCreate({
+        ticker: manualForm.ticker,
+        side: manualForm.side,
+        confidence: Number(manualForm.confidence),
+        rationale: manualForm.rationale,
+        entry_price: Number(manualForm.entry_price),
+        currency: manualForm.currency || undefined,
+        created_at: manualForm.created_at || undefined,
+        status: manualForm.status,
+        review_note: manualForm.review_note,
+      });
+      setManualForm((current) => ({
+        ...current,
+        entry_price: "",
+        rationale: "",
+        review_note: "",
+      }));
+      setActionState("idle");
+    } catch (submitError) {
+      setActionError(submitError.message);
+      setActionState("error");
+    }
+  }
+
+  function startEdit(decision) {
+    setEditingId(decision.id);
+    setEditForm({
+      ticker: decision.ticker,
+      side: decision.side,
+      confidence: decision.confidence,
+      price_at_decision: decision.price_at_decision,
+      currency: decision.currency,
+      created_at: toDateTimeLocal(decision.created_at),
+      status: decision.status || "open",
+      exit_price: decision.exit_price ?? "",
+      exit_at: toDateTimeLocal(decision.exit_at),
+      rationale: decision.rationale || "",
+      review_note: decision.review_note || "",
+    });
+    setActionError("");
+  }
+
+  async function submitEdit(event) {
+    event.preventDefault();
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onUpdate(editingId, {
+        ticker: editForm.ticker,
+        side: editForm.side,
+        confidence: Number(editForm.confidence),
+        price_at_decision: Number(editForm.price_at_decision),
+        currency: editForm.currency,
+        created_at: editForm.created_at || undefined,
+        status: editForm.status,
+        exit_price: editForm.exit_price === "" ? null : Number(editForm.exit_price),
+        exit_at: editForm.exit_at || null,
+        rationale: editForm.rationale,
+        review_note: editForm.review_note,
+      });
+      setEditingId(null);
+      setEditForm(null);
+      setActionState("idle");
+    } catch (submitError) {
+      setActionError(submitError.message);
+      setActionState("error");
+    }
+  }
+
+  async function deleteDecision(decisionId) {
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onDelete(decisionId);
+      setActionState("idle");
+    } catch (deleteError) {
+      setActionError(deleteError.message);
+      setActionState("error");
+    }
+  }
+
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
       <div className="flex items-start justify-between gap-8">
@@ -2730,12 +3045,60 @@ function PortfolioPage({ state, data, error, onRefresh, language, t }) {
       </div>
 
       {stats ? (
-        <div className="mt-8 grid grid-cols-5 gap-4">
+        <div className="mt-8 grid grid-cols-6 gap-4">
           <StatBox label={t.portfolioTotal} value={stats.total_decisions} />
+          <StatBox label={t.portfolioOpenClosed} value={`${stats.open_count || 0}/${stats.closed_count || 0}`} />
           <StatBox label={t.distribution} value={`${stats.bull_count}/${stats.bear_count}/${stats.neutral_count}`} />
           <StatBox label={t.portfolioAvgMove} value={formatPercent(stats.average_pct_change, t)} />
           <StatBox label={t.portfolioAiAgreement} value={formatPercent(stats.ai_agreement_rate, t)} />
           <StatBox label={t.liveDataSource} value="yfinance" />
+        </div>
+      ) : null}
+
+      <form className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-6" onSubmit={submitManualDecision}>
+        <div className="flex items-start justify-between gap-6">
+          <div>
+            <p className="text-sm uppercase text-emerald-200">{t.manualPortfolioKicker}</p>
+            <h2 className="mt-2 text-2xl font-semibold">{t.manualPortfolioTitle}</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-zinc-400">{t.manualPortfolioLead}</p>
+          </div>
+          <button
+            type="submit"
+            disabled={actionState === "saving" || !manualForm.ticker || !manualForm.entry_price}
+            className="rounded bg-emerald-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+          >
+            {actionState === "saving" ? t.saving : t.addPortfolioDecision}
+          </button>
+        </div>
+
+        <div className="mt-5 grid grid-cols-6 gap-4">
+          <LabeledInput label={t.tableTicker} value={manualForm.ticker} onChange={(value) => setManualField("ticker", value)} />
+          <LabeledSelect
+            label={t.tableSide}
+            value={manualForm.side}
+            onChange={(value) => setManualField("side", value)}
+            options={[["bull", t.bullSide], ["bear", t.bearSide], ["neutral", t.neutralSide]]}
+          />
+          <LabeledInput label={t.tableConfidence} type="number" min="1" max="5" value={manualForm.confidence} onChange={(value) => setManualField("confidence", value)} />
+          <LabeledInput label={t.entryPrice} type="number" step="any" value={manualForm.entry_price} onChange={(value) => setManualField("entry_price", value)} />
+          <LabeledInput label={t.currency} value={manualForm.currency} onChange={(value) => setManualField("currency", value)} />
+          <LabeledInput label={t.entryTime} type="datetime-local" value={manualForm.created_at} onChange={(value) => setManualField("created_at", value)} />
+        </div>
+        <div className="mt-4 grid grid-cols-[180px_1fr_1fr] gap-4">
+          <LabeledSelect
+            label={t.portfolioStatus}
+            value={manualForm.status}
+            onChange={(value) => setManualField("status", value)}
+            options={[["watching", t.statusWatching], ["open", t.statusOpen], ["closed", t.statusClosed]]}
+          />
+          <LabeledTextarea label={t.portfolioRationale} value={manualForm.rationale} onChange={(value) => setManualField("rationale", value)} />
+          <LabeledTextarea label={t.reviewNote} value={manualForm.review_note} onChange={(value) => setManualField("review_note", value)} />
+        </div>
+      </form>
+
+      {actionError ? (
+        <div className="mt-5 rounded border border-red-400/40 bg-red-950/40 p-4 text-sm text-red-100">
+          {actionError}
         </div>
       ) : null}
 
@@ -2751,33 +3114,84 @@ function PortfolioPage({ state, data, error, onRefresh, language, t }) {
               <th className="px-4 py-3">{t.portfolioPctChange}</th>
               <th className="px-4 py-3">{t.aiComparison}</th>
               <th className="px-4 py-3">{t.portfolioRationale}</th>
+              <th className="px-4 py-3">{t.actions}</th>
             </tr>
           </thead>
           <tbody>
             {decisions.map((decision) => (
-              <tr key={decision.id} className="border-t border-zinc-800 text-zinc-200">
-                <td className="px-4 py-4">
-                  <p className="font-semibold">{decision.ticker}</p>
-                  <p className="mt-1 text-xs text-zinc-500">{formatDateTime(decision.created_at)}</p>
-                </td>
-                <td className="px-4 py-4">{sideLabel(decision.side, t)}</td>
-                <td className="px-4 py-4">{decision.confidence}</td>
-                <td className="px-4 py-4">{formatPrice(decision.price_at_decision, decision.currency, language)}</td>
-                <td className="px-4 py-4">
-                  {decision.current_price == null
-                    ? t.unavailable
-                    : formatPrice(decision.current_price, decision.currency, language)}
-                </td>
-                <td className={`px-4 py-4 ${pctToneClass(decision.pct_change)}`}>
-                  {decision.pct_change == null ? t.unavailable : formatSignedPercent(decision.pct_change)}
-                </td>
-                <td className="px-4 py-4">
-                  {decision.ai_agreement == null ? t.unavailable : decision.ai_agreement ? t.aiAligned : t.aiDifferent}
-                </td>
-                <td className="max-w-[300px] px-4 py-4 text-xs leading-5 text-zinc-400">
-                  {decision.rationale || t.unavailable}
-                </td>
-              </tr>
+              <Fragment key={decision.id}>
+                <tr className="border-t border-zinc-800 text-zinc-200">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold">{decision.ticker}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{formatDateTime(decision.created_at)}</p>
+                    <p className="mt-1 text-xs text-zinc-500">{statusLabel(decision.status, t)}</p>
+                  </td>
+                  <td className="px-4 py-4">{sideLabel(decision.side, t)}</td>
+                  <td className="px-4 py-4">{decision.confidence}</td>
+                  <td className="px-4 py-4">{formatPrice(decision.price_at_decision, decision.currency, language)}</td>
+                  <td className="px-4 py-4">
+                    {decision.current_price == null
+                      ? t.unavailable
+                      : formatPrice(decision.current_price, decision.currency, language)}
+                    {decision.exit_price != null ? (
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {t.exitPrice}: {formatPrice(decision.exit_price, decision.currency, language)}
+                      </p>
+                    ) : null}
+                  </td>
+                  <td className={`px-4 py-4 ${pctToneClass(decision.pct_change)}`}>
+                    {decision.pct_change == null ? t.unavailable : formatSignedPercent(decision.pct_change)}
+                  </td>
+                  <td className="px-4 py-4">
+                    {decision.ai_agreement == null ? t.unavailable : decision.ai_agreement ? t.aiAligned : t.aiDifferent}
+                  </td>
+                  <td className="max-w-[300px] px-4 py-4 text-xs leading-5 text-zinc-400">
+                    {decision.rationale || t.unavailable}
+                    {decision.review_note ? <p className="mt-2 text-amber-200">{t.reviewNote}: {decision.review_note}</p> : null}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => startEdit(decision)} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-300 hover:text-amber-200">
+                        {t.edit}
+                      </button>
+                      <button type="button" onClick={() => deleteDecision(decision.id)} className="rounded border border-red-400/50 px-2 py-1 text-xs text-red-200 hover:bg-red-950/40">
+                        {t.delete}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {editingId === decision.id && editForm ? (
+                  <tr className="border-t border-zinc-800 bg-zinc-950/70">
+                    <td colSpan="9" className="p-4">
+                      <form onSubmit={submitEdit}>
+                        <div className="grid grid-cols-6 gap-4">
+                          <LabeledInput label={t.tableTicker} value={editForm.ticker} onChange={(value) => setEditField("ticker", value)} />
+                          <LabeledSelect label={t.tableSide} value={editForm.side} onChange={(value) => setEditField("side", value)} options={[["bull", t.bullSide], ["bear", t.bearSide], ["neutral", t.neutralSide]]} />
+                          <LabeledInput label={t.tableConfidence} type="number" min="1" max="5" value={editForm.confidence} onChange={(value) => setEditField("confidence", value)} />
+                          <LabeledInput label={t.entryPrice} type="number" step="any" value={editForm.price_at_decision} onChange={(value) => setEditField("price_at_decision", value)} />
+                          <LabeledInput label={t.currency} value={editForm.currency} onChange={(value) => setEditField("currency", value)} />
+                          <LabeledInput label={t.entryTime} type="datetime-local" value={editForm.created_at} onChange={(value) => setEditField("created_at", value)} />
+                        </div>
+                        <div className="mt-4 grid grid-cols-[180px_180px_220px_1fr_1fr] gap-4">
+                          <LabeledSelect label={t.portfolioStatus} value={editForm.status} onChange={(value) => setEditField("status", value)} options={[["watching", t.statusWatching], ["open", t.statusOpen], ["closed", t.statusClosed]]} />
+                          <LabeledInput label={t.exitPrice} type="number" step="any" value={editForm.exit_price} onChange={(value) => setEditField("exit_price", value)} />
+                          <LabeledInput label={t.exitTime} type="datetime-local" value={editForm.exit_at} onChange={(value) => setEditField("exit_at", value)} />
+                          <LabeledTextarea label={t.portfolioRationale} value={editForm.rationale} onChange={(value) => setEditField("rationale", value)} />
+                          <LabeledTextarea label={t.reviewNote} value={editForm.review_note} onChange={(value) => setEditField("review_note", value)} />
+                        </div>
+                        <div className="mt-4 flex gap-2">
+                          <button type="submit" className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-200">
+                            {t.saveEdit}
+                          </button>
+                          <button type="button" onClick={() => setEditingId(null)} className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500">
+                            {t.cancel}
+                          </button>
+                        </div>
+                      </form>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -2789,7 +3203,26 @@ function PortfolioPage({ state, data, error, onRefresh, language, t }) {
   );
 }
 
-function RecordsPage({ state, data, error, practiceData, practiceState, onRefresh, t }) {
+function RecordsPage({
+  state,
+  data,
+  error,
+  practiceData,
+  practiceState,
+  onUpdateRecord,
+  onDeleteRecord,
+  onUpdatePracticeAttempt,
+  onDeletePracticeAttempt,
+  onRefresh,
+  t,
+}) {
+  const [editingRecordId, setEditingRecordId] = useState(null);
+  const [recordForm, setRecordForm] = useState(null);
+  const [editingAttemptId, setEditingAttemptId] = useState(null);
+  const [attemptForm, setAttemptForm] = useState(null);
+  const [actionState, setActionState] = useState("idle");
+  const [actionError, setActionError] = useState("");
+
   if (state === "loading" && !data) {
     return (
       <section className="mx-auto max-w-6xl px-8 py-12">
@@ -2814,6 +3247,94 @@ function RecordsPage({ state, data, error, practiceData, practiceState, onRefres
   const records = data?.records || [];
   const practiceAttempts = practiceData?.recent_attempts || [];
   const practiceStats = practiceData?.stats;
+
+  function startRecordEdit(record) {
+    setEditingRecordId(record.id);
+    setRecordForm({
+      side: record.side,
+      confidence: record.confidence,
+      note: record.note || "",
+      review_note: record.review_note || "",
+    });
+    setActionError("");
+  }
+
+  async function submitRecordEdit(event) {
+    event.preventDefault();
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onUpdateRecord(editingRecordId, {
+        side: recordForm.side,
+        confidence: Number(recordForm.confidence),
+        note: recordForm.note,
+        review_note: recordForm.review_note,
+      });
+      setEditingRecordId(null);
+      setRecordForm(null);
+      setActionState("idle");
+    } catch (submitError) {
+      setActionError(submitError.message);
+      setActionState("error");
+    }
+  }
+
+  async function deleteRecord(recordId) {
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onDeleteRecord(recordId);
+      setActionState("idle");
+    } catch (deleteError) {
+      setActionError(deleteError.message);
+      setActionState("error");
+    }
+  }
+
+  function startAttemptEdit(attempt) {
+    setEditingAttemptId(attempt.id);
+    setAttemptForm({
+      selected_side: attempt.selected_side,
+      confidence: attempt.confidence,
+      rationale: attempt.rationale || "",
+      review_note: attempt.review_note || "",
+      weights: attempt.weights,
+    });
+    setActionError("");
+  }
+
+  async function submitAttemptEdit(event) {
+    event.preventDefault();
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onUpdatePracticeAttempt(editingAttemptId, {
+        selected_side: attemptForm.selected_side,
+        confidence: Number(attemptForm.confidence),
+        rationale: attemptForm.rationale,
+        review_note: attemptForm.review_note,
+        weights: attemptForm.weights,
+      });
+      setEditingAttemptId(null);
+      setAttemptForm(null);
+      setActionState("idle");
+    } catch (submitError) {
+      setActionError(submitError.message);
+      setActionState("error");
+    }
+  }
+
+  async function deleteAttempt(attemptId) {
+    setActionState("saving");
+    setActionError("");
+    try {
+      await onDeletePracticeAttempt(attemptId);
+      setActionState("idle");
+    } catch (deleteError) {
+      setActionError(deleteError.message);
+      setActionState("error");
+    }
+  }
 
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
@@ -2847,6 +3368,12 @@ function RecordsPage({ state, data, error, practiceData, practiceState, onRefres
         </div>
       ) : null}
 
+      {actionError ? (
+        <div className="mt-5 rounded border border-red-400/40 bg-red-950/40 p-4 text-sm text-red-100">
+          {actionError}
+        </div>
+      ) : null}
+
       <div className="mt-8 overflow-hidden rounded-lg border border-zinc-800">
         <table className="w-full border-collapse bg-zinc-900 text-left text-sm">
           <thead className="bg-zinc-950 text-zinc-400">
@@ -2859,22 +3386,56 @@ function RecordsPage({ state, data, error, practiceData, practiceState, onRefres
               <th className="px-4 py-3">{t.table7d}</th>
               <th className="px-4 py-3">{t.table30d}</th>
               <th className="px-4 py-3">{t.tableJudge}</th>
+              <th className="px-4 py-3">{t.actions}</th>
             </tr>
           </thead>
           <tbody>
             {records.map((record) => (
-              <tr key={record.id} className="border-t border-zinc-800 text-zinc-200">
-                <td className="px-4 py-4 font-semibold">{record.ticker}</td>
-                <td className="px-4 py-4">{sideLabel(record.side, t)}</td>
-                <td className="px-4 py-4">{record.confidence}</td>
-                <td className="px-4 py-4">{record.price_at_verdict.toFixed(2)}</td>
-                <td className="px-4 py-4">{settlementLabel(record, "1d", t)}</td>
-                <td className="px-4 py-4">{settlementLabel(record, "7d", t)}</td>
-                <td className="px-4 py-4">{settlementLabel(record, "30d", t)}</td>
-                <td className="px-4 py-4">
-                  {record.judge_agreement ? t.same : t.different}
-                </td>
-              </tr>
+              <Fragment key={record.id}>
+                <tr className="border-t border-zinc-800 text-zinc-200">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold">{record.ticker}</p>
+                    {record.review_note ? <p className="mt-1 text-xs text-amber-200">{t.reviewNote}: {record.review_note}</p> : null}
+                  </td>
+                  <td className="px-4 py-4">{sideLabel(record.side, t)}</td>
+                  <td className="px-4 py-4">{record.confidence}</td>
+                  <td className="px-4 py-4">{record.price_at_verdict.toFixed(2)}</td>
+                  <td className="px-4 py-4">{settlementLabel(record, "1d", t)}</td>
+                  <td className="px-4 py-4">{settlementLabel(record, "7d", t)}</td>
+                  <td className="px-4 py-4">{settlementLabel(record, "30d", t)}</td>
+                  <td className="px-4 py-4">
+                    {record.judge_agreement ? t.same : t.different}
+                  </td>
+                  <td className="px-4 py-4">
+                    <div className="flex gap-2">
+                      <button type="button" onClick={() => startRecordEdit(record)} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-300 hover:text-amber-200">
+                        {t.edit}
+                      </button>
+                      <button type="button" onClick={() => deleteRecord(record.id)} className="rounded border border-red-400/50 px-2 py-1 text-xs text-red-200 hover:bg-red-950/40">
+                        {t.delete}
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+                {editingRecordId === record.id && recordForm ? (
+                  <tr className="border-t border-zinc-800 bg-zinc-950/70">
+                    <td colSpan="9" className="p-4">
+                      <form onSubmit={submitRecordEdit}>
+                        <div className="grid grid-cols-[180px_160px_1fr_1fr] gap-4">
+                          <LabeledSelect label={t.tableSide} value={recordForm.side} onChange={(value) => setRecordForm((current) => ({ ...current, side: value }))} options={[["bull", t.bullSide], ["bear", t.bearSide], ["neutral", t.neutralSide]]} />
+                          <LabeledInput label={t.tableConfidence} type="number" min="1" max="5" value={recordForm.confidence} onChange={(value) => setRecordForm((current) => ({ ...current, confidence: value }))} />
+                          <LabeledTextarea label={t.noteLabel} value={recordForm.note} onChange={(value) => setRecordForm((current) => ({ ...current, note: value }))} />
+                          <LabeledTextarea label={t.reviewNote} value={recordForm.review_note} onChange={(value) => setRecordForm((current) => ({ ...current, review_note: value }))} />
+                        </div>
+                        <div className="mt-4 flex gap-2">
+                          <button type="submit" className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-200">{t.saveEdit}</button>
+                          <button type="button" onClick={() => setEditingRecordId(null)} className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500">{t.cancel}</button>
+                        </div>
+                      </form>
+                    </td>
+                  </tr>
+                ) : null}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -2915,23 +3476,57 @@ function RecordsPage({ state, data, error, practiceData, practiceState, onRefres
                 <th className="px-4 py-3">{t.practiceOutcome}</th>
                 <th className="px-4 py-3">{t.tableRationale}</th>
                 <th className="px-4 py-3">{t.tableFeedback}</th>
+                <th className="px-4 py-3">{t.actions}</th>
               </tr>
             </thead>
             <tbody>
               {practiceAttempts.map((attempt) => (
-                <tr key={attempt.id} className="border-t border-zinc-800 text-zinc-200">
-                  <td className="px-4 py-4 font-semibold">{attempt.ticker}</td>
-                  <td className="px-4 py-4">{sideLabel(attempt.selected_side, t)}</td>
-                  <td className="px-4 py-4">{attempt.confidence}</td>
-                  <td className={`px-4 py-4 ${attempt.result === "correct" ? "text-emerald-300" : "text-red-300"}`}>
-                    {attempt.result === "correct" ? t.practiceCorrect : t.practiceWrong}
-                  </td>
-                  <td className="px-4 py-4">{formatSignedPercent(attempt.outcome_pct)}</td>
-                  <td className="max-w-[220px] px-4 py-4 text-xs leading-5 text-zinc-400">{attempt.rationale || t.unavailable}</td>
-                  <td className="max-w-[320px] px-4 py-4 text-xs leading-5 text-zinc-300">
-                    {attempt.feedback?.summary || t.unavailable}
-                  </td>
-                </tr>
+                <Fragment key={attempt.id}>
+                  <tr className="border-t border-zinc-800 text-zinc-200">
+                    <td className="px-4 py-4 font-semibold">{attempt.ticker}</td>
+                    <td className="px-4 py-4">{sideLabel(attempt.selected_side, t)}</td>
+                    <td className="px-4 py-4">{attempt.confidence}</td>
+                    <td className={`px-4 py-4 ${attempt.result === "correct" ? "text-emerald-300" : "text-red-300"}`}>
+                      {attempt.result === "correct" ? t.practiceCorrect : t.practiceWrong}
+                    </td>
+                    <td className="px-4 py-4">{formatSignedPercent(attempt.outcome_pct)}</td>
+                    <td className="max-w-[220px] px-4 py-4 text-xs leading-5 text-zinc-400">
+                      {attempt.rationale || t.unavailable}
+                      {attempt.review_note ? <p className="mt-2 text-amber-200">{t.reviewNote}: {attempt.review_note}</p> : null}
+                    </td>
+                    <td className="max-w-[320px] px-4 py-4 text-xs leading-5 text-zinc-300">
+                      {attempt.feedback?.summary || t.unavailable}
+                    </td>
+                    <td className="px-4 py-4">
+                      <div className="flex gap-2">
+                        <button type="button" onClick={() => startAttemptEdit(attempt)} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-300 hover:border-amber-300 hover:text-amber-200">
+                          {t.edit}
+                        </button>
+                        <button type="button" onClick={() => deleteAttempt(attempt.id)} className="rounded border border-red-400/50 px-2 py-1 text-xs text-red-200 hover:bg-red-950/40">
+                          {t.delete}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  {editingAttemptId === attempt.id && attemptForm ? (
+                    <tr className="border-t border-zinc-800 bg-zinc-950/70">
+                      <td colSpan="8" className="p-4">
+                        <form onSubmit={submitAttemptEdit}>
+                          <div className="grid grid-cols-[180px_160px_1fr_1fr] gap-4">
+                            <LabeledSelect label={t.tableSide} value={attemptForm.selected_side} onChange={(value) => setAttemptForm((current) => ({ ...current, selected_side: value }))} options={[["bull", t.bullSide], ["bear", t.bearSide], ["neutral", t.neutralSide]]} />
+                            <LabeledInput label={t.tableConfidence} type="number" min="1" max="5" value={attemptForm.confidence} onChange={(value) => setAttemptForm((current) => ({ ...current, confidence: value }))} />
+                            <LabeledTextarea label={t.practiceRationaleLabel} value={attemptForm.rationale} onChange={(value) => setAttemptForm((current) => ({ ...current, rationale: value }))} />
+                            <LabeledTextarea label={t.reviewNote} value={attemptForm.review_note} onChange={(value) => setAttemptForm((current) => ({ ...current, review_note: value }))} />
+                          </div>
+                          <div className="mt-4 flex gap-2">
+                            <button type="submit" className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 hover:bg-amber-200">{t.saveEdit}</button>
+                            <button type="button" onClick={() => setEditingAttemptId(null)} className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 hover:border-zinc-500">{t.cancel}</button>
+                          </div>
+                        </form>
+                      </td>
+                    </tr>
+                  ) : null}
+                </Fragment>
               ))}
             </tbody>
           </table>
@@ -2982,6 +3577,16 @@ function sideLabel(side, t) {
   return t.neutralSide;
 }
 
+function statusLabel(status, t) {
+  if (status === "closed") {
+    return t.statusClosed;
+  }
+  if (status === "watching") {
+    return t.statusWatching;
+  }
+  return t.statusOpen;
+}
+
 function formatPercent(value, t) {
   return value == null ? t.unavailable : `${value}%`;
 }
@@ -2995,6 +3600,13 @@ function formatDateTime(value) {
     return "";
   }
   return String(value).replace("T", " ").slice(0, 16);
+}
+
+function toDateTimeLocal(value) {
+  if (!value) {
+    return "";
+  }
+  return String(value).slice(0, 16);
 }
 
 function pctToneClass(value) {

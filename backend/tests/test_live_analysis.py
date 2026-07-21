@@ -79,6 +79,9 @@ def test_live_analysis_builds_evidence_based_current_workbench(monkeypatch) -> N
     assert body["news_snapshot"][0]["value"] == "AI demand remains the main theme"
     assert "20 日趨勢" in body["ai_snapshot"]["bull_thesis"]
     assert body["ai_snapshot"]["source"] == "deterministic_ai_coach"
+    assert body["evidence_pack"]
+    assert body["ai_debate"]["bull"]["claims"]
+    assert body["ai_debate"]["bull"]["claims"][0]["evidence_refs"]
     assert "yfinance" in body["source_summary"]
 
 
@@ -125,3 +128,55 @@ def test_portfolio_decision_persists_and_tracks_latest_price(monkeypatch) -> Non
     assert row[2] == 4
     assert "concrete data" in row[3]
     assert "market_window" in row[4]
+
+
+def test_manual_portfolio_decision_can_be_updated_and_deleted(monkeypatch) -> None:
+    database_file = _database_file()
+    monkeypatch.setenv("DATABASE_PATH", str(database_file))
+    price_box = {"price": 130.0}
+    _install_live_fakes(monkeypatch, price_box)
+    client = TestClient(app)
+
+    created = client.post(
+        "/api/portfolio/decisions",
+        json={
+            "ticker": "NVDA",
+            "side": "neutral",
+            "confidence": 2,
+            "rationale": "Manual backfill.",
+            "entry_price": 100.0,
+            "currency": "USD",
+            "created_at": "2026-07-01T09:30:00",
+            "status": "open",
+        },
+    )
+
+    assert created.status_code == 200
+    decision_id = created.json()["id"]
+    assert created.json()["price_at_decision"] == 100.0
+    assert created.json()["pct_change"] == 30.0
+
+    updated = client.patch(
+        f"/api/portfolio/decisions/{decision_id}",
+        json={
+            "side": "bull",
+            "confidence": 5,
+            "price_at_decision": 110.0,
+            "status": "closed",
+            "exit_price": 121.0,
+            "exit_at": "2026-07-10T16:00:00",
+            "review_note": "Closed after target.",
+        },
+    )
+
+    assert updated.status_code == 200
+    body = updated.json()
+    assert body["side"] == "bull"
+    assert body["status"] == "closed"
+    assert body["pct_change"] == 10.0
+    assert body["review_note"] == "Closed after target."
+
+    deleted = client.delete(f"/api/portfolio/decisions/{decision_id}")
+    assert deleted.status_code == 200
+    portfolio = client.get("/api/portfolio").json()
+    assert portfolio["stats"]["total_decisions"] == 0
