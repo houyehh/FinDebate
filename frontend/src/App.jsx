@@ -515,8 +515,19 @@ function App() {
       <nav className="border-b border-zinc-800 bg-zinc-950/90">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-5">
           <div className="flex items-center gap-6">
-            <span className="text-lg font-semibold tracking-wide">Bull vs Bear Arena</span>
+            <span className="text-lg font-semibold tracking-wide">{t.brandName}</span>
             <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setActivePage("practice")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "practice"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                {t.navPractice}
+              </button>
               <button
                 type="button"
                 onClick={() => setActivePage("home")}
@@ -538,17 +549,6 @@ function App() {
                 }`}
               >
                 {t.navRecords}
-              </button>
-              <button
-                type="button"
-                onClick={() => setActivePage("practice")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "practice"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
-              >
-                {t.navPractice}
               </button>
             </div>
           </div>
@@ -591,11 +591,27 @@ function App() {
 
       {activePage === "home" ? (
         <>
-      <section className="mx-auto grid max-w-6xl grid-cols-2 gap-8 px-8 py-12">
+      <section className="mx-auto grid max-w-6xl grid-cols-[1.05fr_0.95fr] gap-8 px-8 py-12">
         <div className="min-w-0 rounded-lg border border-zinc-800 bg-zinc-900 p-7">
           <p className="text-sm uppercase text-amber-200">{t.tickerLookup}</p>
           <h1 className="mt-3 text-4xl font-semibold">{t.appTitle}</h1>
           <p className="mt-4 text-sm leading-6 text-zinc-400">{t.homeSubtitle}</p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={() => setActivePage("practice")}
+              className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
+            >
+              {t.startPracticeCta}
+            </button>
+            <button
+              type="button"
+              onClick={() => document.getElementById("ticker-input")?.focus()}
+              className="rounded border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-emerald-300 hover:text-emerald-200"
+            >
+              {t.currentAnalysisCta}
+            </button>
+          </div>
 
           <div className="mt-6 rounded border border-zinc-800 bg-zinc-950 p-4">
             <p className="text-xs uppercase text-zinc-500">{t.trainingLoopTitle}</p>
@@ -1088,6 +1104,7 @@ function PracticePage({
   const [attempt, setAttempt] = useState(null);
   const [submitState, setSubmitState] = useState("idle");
   const [submitError, setSubmitError] = useState("");
+  const [evidenceTab, setEvidenceTab] = useState("fundamental");
   const questions = data?.questions || [];
   const question = questions[currentIndex] || questions[0];
 
@@ -1099,6 +1116,7 @@ function PracticePage({
     setAttempt(null);
     setSubmitError("");
     setSubmitState("idle");
+    setEvidenceTab("fundamental");
   }, [question?.id]);
 
   if (state === "loading" && !data) {
@@ -1276,35 +1294,38 @@ function PracticePage({
 
       </article>
 
-      {question.market_window?.length ? (
-        <section className="mt-8">
+      <section className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="mb-5 flex items-start justify-between gap-6">
+          <div>
+            <p className="text-sm uppercase text-amber-200">{t.decisionWorkbench}</p>
+            <h2 className="mt-2 text-2xl font-semibold">{t.technicalChartTitle}</h2>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-zinc-400">{t.practiceChartLead}</p>
+          </div>
+          <div className="shrink-0 border border-zinc-800 bg-zinc-950 px-3 py-2 text-right text-xs text-zinc-400">
+            {t.practiceReadPath}
+          </div>
+        </div>
+
+        {question.market_window?.length ? (
+          <MarketIndicatorChart points={question.market_window} t={t} />
+        ) : null}
+
+        <div className="mt-6">
           <div className="mb-4 flex items-end justify-between gap-6">
             <div>
-              <h2 className="text-2xl font-semibold">{t.technicalChartTitle}</h2>
-              <p className="mt-2 text-sm text-zinc-400">{t.practiceChartLead}</p>
+              <h2 className="text-2xl font-semibold">{t.practiceDimensionReview}</h2>
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-zinc-400">{t.practiceDimensionLead}</p>
             </div>
           </div>
-          <MarketIndicatorChart points={question.market_window} t={t} />
-        </section>
-      ) : null}
-
-      <section className="mt-8">
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <h2 className="text-2xl font-semibold">{t.practiceDimensionReview}</h2>
-            <p className="mt-2 text-sm text-zinc-400">{t.practiceDimensionLead}</p>
-          </div>
+          <EvidenceTabs
+            activeTab={evidenceTab}
+            setActiveTab={setEvidenceTab}
+            question={question}
+            t={t}
+          />
         </div>
 
-        <div className="mt-5 grid grid-cols-3 gap-4">
-          <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
-          <MetricPanel title={t.newsDimension} metrics={question.news_snapshot || []} />
-          <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} />
-        </div>
-      </section>
-
-      <section className="mt-8">
-        <div className="grid grid-cols-2 gap-5">
+        <div className="mt-6 grid grid-cols-2 gap-5">
           <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
           <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points} />
         </div>
@@ -1451,6 +1472,55 @@ function PracticePage({
         )}
       </div>
     </section>
+  );
+}
+
+function EvidenceTabs({ activeTab, setActiveTab, question, t }) {
+  const tabs = [
+    ["fundamental", t.fundamentalDimension],
+    ["news", t.newsDimension],
+    ["ai", t.aiDimension],
+    ["counter", t.counterEvidence],
+  ];
+
+  return (
+    <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+      <div className="flex flex-wrap gap-2 border-b border-zinc-800 pb-3">
+        {tabs.map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setActiveTab(key)}
+            className={`rounded px-3 py-2 text-sm font-semibold transition ${
+              activeTab === key
+                ? "bg-amber-300 text-zinc-950"
+                : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-4">
+        {activeTab === "fundamental" ? (
+          <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
+        ) : null}
+        {activeTab === "news" ? (
+          <MetricPanel title={t.newsDimension} metrics={question.news_snapshot || []} />
+        ) : null}
+        {activeTab === "ai" ? <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} /> : null}
+        {activeTab === "counter" ? (
+          <div>
+            <p className="text-sm leading-6 text-zinc-400">{t.counterEvidenceLead}</p>
+            <div className="mt-4 grid grid-cols-2 gap-4">
+              <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points || []} />
+              <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points || []} />
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </div>
   );
 }
 
@@ -1785,6 +1855,7 @@ function MarketIndicatorChart({ points, t }) {
           </label>
         ))}
       </div>
+      <ChartHoverInspector point={activePoint} t={t} />
       <svg
         className="h-[660px] w-full"
         viewBox={`0 0 ${width} ${height}`}
@@ -1885,12 +1956,6 @@ function MarketIndicatorChart({ points, t }) {
 
         <line x1={activeX} x2={activeX} y1={priceTop} y2={macdTop + macdHeight} className="stroke-amber-200/50" strokeDasharray="4 6" />
         <circle cx={activeX} cy={yPrice(activePoint.close)} r="4" className="fill-amber-200" />
-        <ChartHoverTooltip
-          point={activePoint}
-          x={activeX > width - 280 ? activeX - 260 : activeX + 14}
-          y={priceTop + 16}
-          t={t}
-        />
 
         <text x={left} y={height - 5} className="fill-zinc-500 text-[11px]">
           {firstDate}
@@ -1911,8 +1976,8 @@ function MarketIndicatorChart({ points, t }) {
   );
 }
 
-function ChartHoverTooltip({ point, x, y, t }) {
-  const rows = [
+function ChartHoverInspector({ point, t }) {
+  const items = [
     [t.chartOpen, formatTooltipNumber(point.open)],
     [t.chartHigh, formatTooltipNumber(point.high)],
     [t.chartLow, formatTooltipNumber(point.low)],
@@ -1926,34 +1991,18 @@ function ChartHoverTooltip({ point, x, y, t }) {
     ["KD", `${formatTooltipNumber(point.k, 1)} / ${formatTooltipNumber(point.d, 1)}`],
     ["MACD", `${formatTooltipNumber(point.macd, 3)} / ${formatTooltipNumber(point.macd_signal, 3)} / ${formatTooltipNumber(point.macd_hist, 3)}`],
   ];
-  const rowHeight = 17;
-  const tooltipWidth = 242;
-  const tooltipHeight = 34 + rows.length * rowHeight;
 
   return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={tooltipWidth}
-        height={tooltipHeight}
-        rx="4"
-        className="fill-zinc-950 stroke-amber-300/60"
-      />
-      <text x={x + 12} y={y + 18} className="fill-amber-200 text-[12px] font-semibold">
-        {point.date}
-      </text>
-      {rows.map(([label, value], index) => (
-        <g key={label}>
-          <text x={x + 12} y={y + 38 + index * rowHeight} className="fill-zinc-500 text-[11px]">
-            {label}
-          </text>
-          <text x={x + 105} y={y + 38 + index * rowHeight} className="fill-zinc-100 text-[11px]">
-            {value}
-          </text>
-        </g>
-      ))}
-    </g>
+    <div className="mb-4 border border-amber-300/30 bg-amber-950/10 p-3">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs">
+        <span className="font-semibold text-amber-200">{point.date}</span>
+        {items.map(([label, value]) => (
+          <span key={label} className="text-zinc-400">
+            {label} <span className="font-semibold text-zinc-100">{value}</span>
+          </span>
+        ))}
+      </div>
+    </div>
   );
 }
 

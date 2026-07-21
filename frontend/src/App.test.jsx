@@ -573,16 +573,21 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
     fireEvent.click(screen.getByRole("button", { name: "Practice" }));
 
-    expect(await screen.findByText("Historical Backtest Drills")).toBeInTheDocument();
+    expect(await screen.findByText("Historical Judgment Drills")).toBeInTheDocument();
     expect(screen.getByText(/Training goal/)).toBeInTheDocument();
+    expect(screen.getByText("Decision Workbench")).toBeInTheDocument();
+    expect(screen.getByText("Evidence Panel")).toBeInTheDocument();
+    expect(screen.getByText("Read chart → Check evidence → Audit AI → Answer")).toBeInTheDocument();
     expect(screen.getAllByText("Technical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Fundamental").length).toBeGreaterThan(0);
     expect(screen.queryByText("Price-volume proxy")).not.toBeInTheDocument();
-    expect(screen.getByText(/AI suggested side/)).toBeInTheDocument();
     expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(screen.getAllByText("Bollinger Bands").length).toBeGreaterThan(0);
     expect(screen.getByText("News/Theme")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "News/Theme" }));
     expect(screen.getByText("AI demand remains a key theme")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "AI" }));
+    expect(screen.getByText(/AI suggested side/)).toBeInTheDocument();
     expect(screen.queryByText("Close 123.45; 5D +2.00%, 20D +5.00%.")).not.toBeInTheDocument();
     expect(screen.getByText("Open")).toBeInTheDocument();
     expect(screen.getAllByText("MA10").length).toBeGreaterThan(0);
@@ -670,7 +675,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
     fireEvent.click(screen.getByRole("button", { name: "Practice" }));
 
-    expect(await screen.findByText("Historical Backtest Drills")).toBeInTheDocument();
+    expect(await screen.findByText("Historical Judgment Drills")).toBeInTheDocument();
     expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("http://127.0.0.1:8030/api/practice?"),

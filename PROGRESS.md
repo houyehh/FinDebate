@@ -745,3 +745,30 @@
 ### 下一步
 - 可進一步補歷史新聞資料源或匯入靜態新聞事件資料集，讓新聞/題材面更接近真正 point-in-time。
 - 若要做比賽影片，建議重錄 Practice 片段，強調「歷史防穿越、圖表 tooltip、個人化教練」三個亮點。
+## 2026-07-21 新定位與 Decision Workbench 版面重排
+
+### 做了什麼
+- 將前端品牌與首頁定位從 `Bull vs Bear Arena` 收斂為「AI 投資決策健身房」，把產品主軸改成歷史判斷訓練、AI 分析審核與真實回測。
+- 導覽列改成練習優先，首頁原本的標的查詢改為「即時分析」入口，並新增「開始歷史練習」與「分析現在標的」兩個 CTA。
+- 將 Practice 頁重排為 `Decision Workbench`：題目摘要後先呈現全寬大圖表，再把基本面、新聞/題材、AI 面、反方檢查放到圖表下方 tabs。
+- 將 K 線圖原本跟著游標移動的 SVG tooltip 改成圖表上方固定 inspector 資料列；圖上只保留 vertical crosshair 與收盤點，避免遮住其他日期 K 線。
+- 新增證據面板 tabs 的互動測試，確保 News/Theme、AI 面內容需切換 tab 後呈現，符合新的工作台閱讀節奏。
+
+### 關鍵決定
+- 暫不新增獨立即時分析頁路由，而是先把首頁標的查詢定位成「即時分析」入口；後續可將同一套 Decision Workbench 抽成共用元件後再擴充。
+- Practice 工作台採「圖表在上、證據面板在下」而非左右分欄，優先保留圖表寬度與掃讀清晰度。
+- 固定 inspector 放在圖表 SVG 外部，避免 hover 資料遮擋 K 線與技術指標。
+
+### 遇到的問題
+- `練習` 與 `開始歷史練習` 兩個按鈕會讓瀏覽器 role name 模糊匹配；驗證時改用 exact match 點擊導覽列。
+- Windows sandbox 仍會阻擋 Vitest/Vite 讀取設定檔，因此前端測試與 build 使用提升權限執行。
+
+### 驗收測試
+- `npm.cmd test -- --run`：10 passed。
+- `npm.cmd run build`：成功。
+- `git diff --check`：無 whitespace error，只有 Windows LF/CRLF 提示。
+- in-app browser：首頁新品牌、新標題與 CTA 正常；Practice 顯示 Decision Workbench、固定 inspector、證據 tabs；AI tab 切換正常；圖表 hover 日期會更新且 SVG 內不再有浮動 tooltip。
+
+### 下一步
+- 將首頁即時分析真正升級為「決策備忘錄」模式，重用 Decision Workbench 的全寬圖表、固定 inspector 與證據 tabs。
+- 將戰績頁改成「能力地圖」，讓使用者直接看到 AI 依賴、反方思考、信心校準等弱點診斷。
