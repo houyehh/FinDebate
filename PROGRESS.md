@@ -1,5 +1,31 @@
 # 開發進度
 
+## 2026-07-21 皇宮視覺外殼套用
+
+### 做了什麼
+- 建立本地備份 tag `backup/pre-palace-visual` 指向 `6d5dac8`，保留視覺改版前的 undo 錨點。
+- 新增 `palace-*` 視覺系統：深黑底、金色細框、宮廷感 serif 標題、低調金色導覽與主按鈕。
+- 首頁重做成「私人決策殿堂」主視覺，加入 Decision Reliquary 示意面板，讓產品第一眼更像 AI 投資訓練品牌，而不是一般金融表格工具。
+- Practice、Live Desk、Portfolio、Review Center 的頁首套用皇宮感外殼；圖表、指標、表格、AI 辯論與資料工作區維持 `terminal-panel`，保留傳統分析軟體的黑底、紅綠漲跌與等寬數字風格。
+- 導覽命名調整為「市場回放 / 即時工作台 / 投資追蹤 / 復盤中心」，英文改為 `Market Replay / Live Desk / Portfolio Lab / Review Center`。
+
+### 關鍵決定
+- 皇宮奢華感只用在品牌、首頁、頁首與 CTA；資料閱讀區避免過度裝飾，讓 K 線、指標、新聞與 AI 辯論仍然一眼可掃。
+- 未引入外部字體載入，先使用系統 serif / sans / mono fallback，降低 demo 現場網路與打包風險。
+- 首頁示意卡片改走 i18n 字典，繁中介面不再混入固定英文結果文字。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：37 passed，1 個既有 Starlette/httpx deprecation warning。
+- `npm.cmd test -- --run`：13 passed。
+- `npm.cmd run build`：通過。
+- `git diff --check`：無 whitespace error；僅 Windows LF/CRLF 提示。
+
+### 遇到問題
+- 前端測試第一次失敗，原因是某個案例仍在繁中模式，測試卻改找英文 `Portfolio Lab`；已修正為尋找「投資追蹤」。
+
+### 下一步
+- 若視覺方向符合預期，可再針對首頁第一屏、錄影開場鏡頭與頁面截圖做最後細節微調。
+
 ## 2026-07-21 基本面估值指標補強
 
 ### 做了什麼

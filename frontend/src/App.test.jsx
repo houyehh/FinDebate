@@ -907,7 +907,7 @@ describe("App", () => {
       weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
+    fireEvent.click(screen.getByRole("button", { name: "投資追蹤" }));
     expect(await screen.findByText("當下決策追蹤")).toBeInTheDocument();
     expect(screen.getByText("Valuation risk outweighed momentum.")).toBeInTheDocument();
     expect(screen.getByText("+5.3%")).toBeInTheDocument();
@@ -917,7 +917,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
+    fireEvent.click(screen.getByRole("button", { name: "Portfolio Lab" }));
     expect(await screen.findByText("Current Decision Tracking")).toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText("Entry price"), { target: { value: "118.5" } });
@@ -1058,7 +1058,7 @@ describe("App", () => {
     render(<App />);
 
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    fireEvent.click(screen.getByRole("button", { name: "Practice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Market Replay" }));
 
     expect(await screen.findByText("Historical Judgment Drills")).toBeInTheDocument();
     expect(screen.getByText(/Training goal/)).toBeInTheDocument();
@@ -1172,7 +1172,7 @@ describe("App", () => {
 
     render(<App />);
     fireEvent.click(screen.getByRole("button", { name: "EN" }));
-    fireEvent.click(screen.getByRole("button", { name: "Practice" }));
+    fireEvent.click(screen.getByRole("button", { name: "Market Replay" }));
 
     expect(await screen.findByText("Historical Judgment Drills")).toBeInTheDocument();
     expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();

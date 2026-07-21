@@ -767,14 +767,14 @@ function App() {
   }
 
   return (
-    <main className="min-h-screen bg-zinc-950 text-zinc-100">
-      <nav className="border-b border-zinc-800 bg-zinc-950/90">
+    <main className="palace-app min-h-screen text-zinc-100">
+      <nav className="palace-nav">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-8 py-5">
           <div className="flex items-center gap-6">
             <button
               type="button"
               onClick={() => setActivePage("home")}
-              className="text-left text-lg font-semibold tracking-wide text-zinc-100 transition hover:text-amber-200"
+              className="palace-brand text-left text-lg font-semibold transition hover:text-amber-100"
             >
               {t.brandName}
             </button>
@@ -782,22 +782,14 @@ function App() {
               <button
                 type="button"
                 onClick={() => setActivePage("home")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "home"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
+                className={`palace-tab rounded px-3 py-1 text-sm transition ${activePage === "home" ? "palace-tab-active" : ""}`}
               >
                 {t.navHome}
               </button>
               <button
                 type="button"
                 onClick={() => setActivePage("practice")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "practice"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
+                className={`palace-tab rounded px-3 py-1 text-sm transition ${activePage === "practice" ? "palace-tab-active" : ""}`}
               >
                 {t.navPractice}
               </button>
@@ -807,45 +799,33 @@ function App() {
                   setActivePage("live");
                   window.setTimeout(() => document.getElementById("ticker-input")?.focus(), 0);
                 }}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "live"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
+                className={`palace-tab rounded px-3 py-1 text-sm transition ${activePage === "live" ? "palace-tab-active" : ""}`}
               >
                 {t.navLiveAnalysis}
               </button>
               <button
                 type="button"
                 onClick={() => setActivePage("portfolio")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "portfolio"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
+                className={`palace-tab rounded px-3 py-1 text-sm transition ${activePage === "portfolio" ? "palace-tab-active" : ""}`}
               >
                 {t.navPortfolio}
               </button>
               <button
                 type="button"
                 onClick={() => setActivePage("records")}
-                className={`rounded px-3 py-1 text-sm transition ${
-                  activePage === "records"
-                    ? "bg-zinc-800 text-amber-200"
-                    : "text-zinc-400 hover:text-zinc-100"
-                }`}
+                className={`palace-tab rounded px-3 py-1 text-sm transition ${activePage === "records" ? "palace-tab-active" : ""}`}
               >
                 {t.navRecords}
               </button>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex rounded border border-zinc-700 p-1 text-sm">
+            <div className="flex rounded border border-amber-400/25 bg-zinc-950/60 p-1 text-sm">
               <button
                 type="button"
                 onClick={() => changeLanguage("zh-Hant")}
                 className={`rounded px-2 py-1 ${
-                  language === "zh-Hant" ? "bg-zinc-800 text-amber-200" : "text-zinc-400"
+                  language === "zh-Hant" ? "bg-amber-300 text-zinc-950" : "text-zinc-400"
                 }`}
               >
                 繁中
@@ -854,7 +834,7 @@ function App() {
                 type="button"
                 onClick={() => changeLanguage("en")}
                 className={`rounded px-2 py-1 ${
-                  language === "en" ? "bg-zinc-800 text-amber-200" : "text-zinc-400"
+                  language === "en" ? "bg-amber-300 text-zinc-950" : "text-zinc-400"
                 }`}
               >
                 EN
@@ -865,8 +845,8 @@ function App() {
               onClick={() => setActivePage("settings")}
               className={`rounded border px-3 py-1 text-sm transition ${
                 activePage === "settings"
-                  ? "border-amber-300 bg-amber-950/30 text-amber-100"
-                  : "border-amber-400/40 text-amber-200 hover:border-amber-300 hover:bg-amber-950/20"
+                  ? "border-amber-200 bg-amber-300 text-zinc-950"
+                  : "border-amber-400/45 text-amber-200 hover:border-amber-200 hover:bg-amber-950/30"
               }`}
               title={t.apiStatusButtonTitle}
             >
@@ -1009,38 +989,96 @@ function HomePage({ onStartPractice, onStartLive, onOpenReview, t }) {
 
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
-      <div className="border-y border-zinc-800 py-12">
-        <p className="text-sm uppercase text-amber-200">{t.homeKicker}</p>
-        <h1 className="mt-4 max-w-4xl text-5xl font-semibold leading-tight text-zinc-50">{t.appTitle}</h1>
-        <p className="mt-5 max-w-3xl text-base leading-7 text-zinc-400">{t.homeSubtitle}</p>
-        <div className="mt-8 flex flex-wrap gap-3">
-          <button
-            type="button"
-            onClick={onStartPractice}
-            className="rounded bg-amber-300 px-5 py-3 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200"
-          >
-            {t.startPracticeCta}
-          </button>
-          <button
-            type="button"
-            onClick={onStartLive}
-            className="rounded border border-emerald-300/60 px-5 py-3 text-sm font-semibold text-emerald-100 transition hover:bg-emerald-950/30"
-          >
-            {t.currentAnalysisCta}
-          </button>
+      <div className="palace-hero grid grid-cols-[1.05fr_0.95fr] gap-8 p-10">
+        <div className="relative z-10 py-5">
+          <p className="palace-kicker text-sm font-semibold">{t.homeKicker}</p>
+          <h1 className="palace-title mt-5 max-w-4xl text-5xl font-semibold leading-tight">{t.appTitle}</h1>
+          <p className="mt-5 max-w-3xl text-base leading-7 text-[#d8cfb7]">{t.homeSubtitle}</p>
+          <div className="mt-8 flex flex-wrap gap-3">
+            <button
+              type="button"
+              onClick={onStartPractice}
+              className="palace-button-primary rounded px-5 py-3 text-sm font-semibold transition"
+            >
+              {t.startPracticeCta}
+            </button>
+            <button
+              type="button"
+              onClick={onStartLive}
+              className="palace-button-secondary rounded px-5 py-3 text-sm font-semibold transition"
+            >
+              {t.currentAnalysisCta}
+            </button>
+          </div>
+          <p className="mt-7 max-w-2xl border-l border-amber-300/40 pl-4 text-sm leading-6 text-[#b7ad97]">
+            {t.homePalaceCaption}
+          </p>
+        </div>
+
+        <div className="relative z-10">
+          <div className="palace-card p-5">
+            <div className="flex items-start justify-between gap-4 border-b border-amber-300/20 pb-4">
+              <div>
+                <p className="palace-kicker text-xs">{t.homeMockTitle}</p>
+                <h2 className="palace-heading mt-2 text-2xl font-semibold text-[#f8f1dc]">{t.homeMockCase}</h2>
+              </div>
+              <span className="numeric-text border border-emerald-400/40 bg-emerald-950/30 px-2 py-1 text-xs text-emerald-200">
+                +7.8%
+              </span>
+            </div>
+            <div className="mt-5 terminal-panel p-4">
+              <div className="grid grid-cols-10 items-end gap-2">
+                {[30, 42, 35, 58, 73, 64, 86, 78, 94, 88].map((height, index) => (
+                  <div key={index} className="flex h-24 items-end border-b border-zinc-700">
+                    <div
+                      className={index % 3 === 0 ? "w-full bg-red-400/70" : "w-full bg-emerald-300/75"}
+                      style={{ height: `${height}%` }}
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
+                <div className="border border-zinc-800 bg-zinc-950 p-2">
+                  <p className="text-zinc-500">MA10</p>
+                  <p className="numeric-text mt-1 text-emerald-300">235.77</p>
+                </div>
+                <div className="border border-zinc-800 bg-zinc-950 p-2">
+                  <p className="text-zinc-500">MACD</p>
+                  <p className="numeric-text mt-1 text-emerald-300">+0.105</p>
+                </div>
+                <div className="border border-zinc-800 bg-zinc-950 p-2">
+                  <p className="text-zinc-500">PE</p>
+                  <p className="numeric-text mt-1 text-amber-200">32.5</p>
+                </div>
+              </div>
+            </div>
+            <div className="mt-4 space-y-2 text-sm">
+              <p className="flex justify-between gap-4 text-zinc-300">
+                <span>{t.homeMockVerdict}</span>
+                <span className="numeric-text text-red-300">{t.homeMockSide}</span>
+              </p>
+              <p className="flex justify-between gap-4 text-zinc-300">
+                <span>{t.homeMockOutcome}</span>
+                <span className="numeric-text text-emerald-300">{t.homeMockResult}</span>
+              </p>
+              <p className="border-t border-amber-300/20 pt-3 text-xs leading-5 text-[#cbbf9d]">
+                {t.homeMockCoach}
+              </p>
+            </div>
+          </div>
         </div>
       </div>
 
       <div className="mt-10 grid grid-cols-3 gap-5">
         {journeys.map((item, index) => (
-          <article key={item.title} className="border border-zinc-800 bg-zinc-900 p-5">
+          <article key={item.title} className="palace-card p-5">
             <p className={`text-sm font-semibold ${item.accent}`}>0{index + 1}</p>
-            <h2 className="mt-3 text-xl font-semibold text-zinc-100">{item.title}</h2>
-            <p className="mt-3 min-h-24 text-sm leading-6 text-zinc-400">{item.body}</p>
+            <h2 className="palace-heading mt-3 text-xl font-semibold text-[#f8f1dc]">{item.title}</h2>
+            <p className="mt-3 min-h-24 text-sm leading-6 text-[#b7ad97]">{item.body}</p>
             <button
               type="button"
               onClick={item.onClick}
-              className="mt-5 rounded border border-zinc-700 px-4 py-2 text-sm font-semibold text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+              className="palace-button-secondary mt-5 rounded px-4 py-2 text-sm font-semibold transition"
             >
               {item.action}
             </button>
@@ -1048,8 +1086,8 @@ function HomePage({ onStartPractice, onStartLive, onOpenReview, t }) {
         ))}
       </div>
 
-      <div className="mt-8 border border-zinc-800 bg-zinc-950 p-5">
-        <p className="text-xs uppercase text-zinc-500">{t.trainingLoopTitle}</p>
+      <div className="mt-8 terminal-panel p-5">
+        <p className="palace-kicker text-xs">{t.trainingLoopTitle}</p>
         <div className="mt-4 grid grid-cols-5 gap-2 text-center text-xs text-zinc-300">
           {t.trainingLoopSteps.map((step, index) => (
             <div key={step} className="border border-zinc-800 bg-zinc-900 px-2 py-3">
@@ -1099,10 +1137,10 @@ function LiveAnalysisPage({
   return (
     <>
       <section className="mx-auto grid max-w-6xl grid-cols-[1.05fr_0.95fr] gap-8 px-8 py-12">
-        <div className="min-w-0 border border-zinc-800 bg-zinc-900 p-7">
-          <p className="text-sm uppercase text-emerald-200">{t.liveAnalysisKicker}</p>
-          <h1 className="mt-3 text-4xl font-semibold">{t.liveAnalysisHomeTitle}</h1>
-          <p className="mt-4 text-sm leading-6 text-zinc-400">{t.liveAnalysisHomeSubtitle}</p>
+        <div className="palace-card min-w-0 p-7">
+          <p className="palace-kicker text-sm font-semibold">{t.liveAnalysisKicker}</p>
+          <h1 className="palace-heading mt-3 text-4xl font-semibold text-[#f8f1dc]">{t.liveAnalysisHomeTitle}</h1>
+          <p className="mt-4 text-sm leading-6 text-[#b7ad97]">{t.liveAnalysisHomeSubtitle}</p>
 
           <form className="mt-8 space-y-4" onSubmit={handleSubmit}>
             <label className="block text-sm font-medium text-zinc-300" htmlFor="ticker-input">
@@ -1182,7 +1220,7 @@ function LiveAnalysisPage({
           ) : null}
         </div>
 
-        <div className="min-w-0 border border-zinc-800 bg-zinc-900 p-7">
+        <div className="terminal-panel min-w-0 p-7">
           {snapshot ? (
             <>
               <div className="flex items-start justify-between gap-6">
@@ -1524,13 +1562,13 @@ function LiveAnalysisWorkbench({
 
   return (
     <section className="mx-auto max-w-7xl px-8 pb-12">
-      <article className="border-y border-zinc-800 py-7">
+      <article className="palace-card p-7">
         <div className="grid grid-cols-[1fr_320px] gap-8">
           <div>
-            <p className="text-sm uppercase text-emerald-200">{t.liveAnalysisKicker}</p>
-            <h1 className="mt-2 text-4xl font-semibold">{analysis.ticker}: {analysis.name}</h1>
-            <p className="mt-4 max-w-4xl text-sm leading-6 text-zinc-400">{t.liveAnalysisSubtitle}</p>
-            <p className="mt-4 text-xs leading-5 text-zinc-500">{analysis.source_summary}</p>
+            <p className="palace-kicker text-sm font-semibold">{t.liveAnalysisKicker}</p>
+            <h1 className="palace-heading mt-2 text-4xl font-semibold text-[#f8f1dc]">{analysis.ticker}: {analysis.name}</h1>
+            <p className="mt-4 max-w-4xl text-sm leading-6 text-[#b7ad97]">{t.liveAnalysisSubtitle}</p>
+            <p className="mt-4 text-xs leading-5 text-[#8f836b]">{analysis.source_summary}</p>
           </div>
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div className="border border-zinc-800 bg-zinc-950 p-3">
@@ -1551,7 +1589,7 @@ function LiveAnalysisWorkbench({
         </div>
       </article>
 
-      <section className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900/40 p-6">
+      <section className="terminal-panel mt-8 rounded-lg p-6">
         <div className="mb-5 flex items-start justify-between gap-6">
           <div>
             <p className="text-sm uppercase text-emerald-200">{t.decisionWorkbench}</p>
@@ -1815,24 +1853,24 @@ function PracticePage({
 
   return (
     <section className="mx-auto max-w-7xl px-8 py-12">
-      <div className="flex items-start justify-between gap-8">
+      <div className="palace-card flex items-start justify-between gap-8 p-7">
         <div>
-          <p className="text-sm uppercase text-amber-200">{t.practiceKicker}</p>
-          <h1 className="mt-2 text-4xl font-semibold">{t.practiceTitle}</h1>
-          <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-400">{t.practiceSubtitle}</p>
+          <p className="palace-kicker text-sm font-semibold">{t.practiceKicker}</p>
+          <h1 className="palace-heading mt-2 text-4xl font-semibold text-[#f8f1dc]">{t.practiceTitle}</h1>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-[#b7ad97]">{t.practiceSubtitle}</p>
         </div>
         <div className="flex gap-3">
           <button
             type="button"
             onClick={refreshQuestions}
-            className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200 whitespace-nowrap"
+            className="palace-button-secondary rounded px-4 py-2 text-sm transition whitespace-nowrap"
           >
             {t.randomPractice}
           </button>
           <button
             type="button"
             onClick={goToAnswer}
-            className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200 whitespace-nowrap"
+            className="palace-button-primary rounded px-4 py-2 text-sm font-semibold transition whitespace-nowrap"
           >
             {t.practiceAnswerCta}
           </button>
@@ -1860,7 +1898,7 @@ function PracticePage({
         </div>
       ) : null}
 
-      <article className="mt-8 border-y border-zinc-800 py-7">
+      <article className="terminal-panel mt-8 p-7">
         <div className="grid grid-cols-[1fr_280px] gap-8">
           <div>
             <p className="text-sm uppercase text-zinc-400">
@@ -3231,16 +3269,16 @@ function PortfolioPage({ state, data, error, onRefresh, onCreate, onUpdate, onDe
 
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
-      <div className="flex items-start justify-between gap-8">
+      <div className="palace-card flex items-start justify-between gap-8 p-7">
         <div>
-          <p className="text-sm uppercase text-emerald-200">{t.portfolioKicker}</p>
-          <h1 className="mt-2 text-4xl font-semibold">{t.portfolioTitle}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">{t.portfolioSubtitle}</p>
+          <p className="palace-kicker text-sm font-semibold">{t.portfolioKicker}</p>
+          <h1 className="palace-heading mt-2 text-4xl font-semibold text-[#f8f1dc]">{t.portfolioTitle}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#b7ad97]">{t.portfolioSubtitle}</p>
         </div>
         <button
           type="button"
           onClick={onRefresh}
-          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-emerald-300 hover:text-emerald-200"
+          className="palace-button-secondary rounded px-4 py-2 text-sm transition"
         >
           {t.refresh}
         </button>
@@ -3257,7 +3295,7 @@ function PortfolioPage({ state, data, error, onRefresh, onCreate, onUpdate, onDe
         </div>
       ) : null}
 
-      <form className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-6" onSubmit={submitManualDecision}>
+      <form className="terminal-panel mt-8 rounded-lg p-6" onSubmit={submitManualDecision}>
         <div className="flex items-start justify-between gap-6">
           <div>
             <p className="text-sm uppercase text-emerald-200">{t.manualPortfolioKicker}</p>
@@ -3541,29 +3579,29 @@ function RecordsPage({
 
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
-      <div className="flex items-start justify-between gap-8">
+      <div className="palace-card flex items-start justify-between gap-8 p-7">
         <div>
-          <p className="text-sm uppercase text-amber-200">{t.reviewCenterKicker}</p>
-          <h1 className="mt-2 text-4xl font-semibold">{t.reviewCenterTitle}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">{t.reviewCenterLead}</p>
+          <p className="palace-kicker text-sm font-semibold">{t.reviewCenterKicker}</p>
+          <h1 className="palace-heading mt-2 text-4xl font-semibold text-[#f8f1dc]">{t.reviewCenterTitle}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-[#b7ad97]">{t.reviewCenterLead}</p>
         </div>
         <button
           type="button"
           onClick={onRefresh}
-          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
+          className="palace-button-secondary rounded px-4 py-2 text-sm transition"
         >
           {t.refresh}
         </button>
       </div>
 
-      <div className="mt-8 flex gap-2 border-b border-zinc-800 pb-3">
+      <div className="mt-8 flex gap-2 border-b border-amber-300/20 pb-3">
         <button
           type="button"
           onClick={() => setActiveReviewTab("practice")}
           className={`rounded px-4 py-2 text-sm font-semibold transition ${
             activeReviewTab === "practice"
               ? "bg-amber-300 text-zinc-950"
-              : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+              : "palace-button-secondary"
           }`}
         >
           {t.practiceReviewTab}
@@ -3574,7 +3612,7 @@ function RecordsPage({
           className={`rounded px-4 py-2 text-sm font-semibold transition ${
             activeReviewTab === "live"
               ? "bg-amber-300 text-zinc-950"
-              : "border border-zinc-700 text-zinc-300 hover:border-amber-300 hover:text-amber-200"
+              : "palace-button-secondary"
           }`}
         >
           {t.liveReviewTab}
@@ -3777,9 +3815,9 @@ function RecordsPage({
 
 function StatBox({ label, value }) {
   return (
-    <div className="rounded-lg border border-zinc-800 bg-zinc-900 p-4">
+    <div className="terminal-panel rounded-lg p-4">
       <p className="text-sm text-zinc-400">{label}</p>
-      <p className="mt-2 text-2xl font-semibold text-zinc-100">{value}</p>
+      <p className="numeric-text mt-2 text-2xl font-semibold text-zinc-100">{value}</p>
     </div>
   );
 }
