@@ -1274,15 +1274,6 @@ function PracticePage({
           ) : null}
         </div>
 
-        {question.indicator_summary?.length ? (
-          <div className="mt-6 grid grid-cols-4 gap-3">
-            {question.indicator_summary.map((item) => (
-              <div key={item} className="border border-zinc-800 bg-zinc-950 p-3 text-xs leading-5 text-zinc-300">
-                {item}
-              </div>
-            ))}
-          </div>
-        ) : null}
       </article>
 
       {question.market_window?.length ? (
@@ -1303,18 +1294,13 @@ function PracticePage({
             <h2 className="text-2xl font-semibold">{t.practiceDimensionReview}</h2>
             <p className="mt-2 text-sm text-zinc-400">{t.practiceDimensionLead}</p>
           </div>
-          <p className="max-w-sm text-right text-xs leading-5 text-zinc-500">{t.priceVolumeProxyNote}</p>
         </div>
 
         <div className="mt-5 grid grid-cols-3 gap-4">
-          <MetricPanel title={t.technicalDimension} metrics={question.technical_snapshot || []} />
           <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
+          <MetricPanel title={t.newsDimension} metrics={question.news_snapshot || []} />
           <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} />
         </div>
-
-        {question.chip_snapshot?.length ? (
-          <MetricStrip title={t.priceVolumeProxy} metrics={question.chip_snapshot} />
-        ) : null}
       </section>
 
       <section className="mt-8">
@@ -1489,27 +1475,6 @@ function MetricPanel({ title, metrics }) {
       ) : (
         <p className="mt-3 text-sm text-zinc-500">No data</p>
       )}
-    </div>
-  );
-}
-
-function MetricStrip({ title, metrics }) {
-  return (
-    <div className="mt-4 border border-zinc-800 bg-zinc-950 p-4">
-      <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
-      <div className="mt-3 grid grid-cols-4 gap-3">
-        {metrics.map((metric) => (
-          <div key={`${title}-${metric.label}`} className="border border-zinc-800 bg-zinc-900 p-3">
-            <div className="flex items-start justify-between gap-3">
-              <p className="text-xs text-zinc-500">{metric.label}</p>
-              <span className={`text-xs font-semibold ${metricToneClass(metric.tone)}`}>
-                {metric.value}
-              </span>
-            </div>
-            {metric.detail ? <p className="mt-2 text-xs leading-5 text-zinc-400">{metric.detail}</p> : null}
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -1702,6 +1667,16 @@ function MarketIndicatorChart({ points, t }) {
     return null;
   }
 
+  const [visibleSeries, setVisibleSeries] = useState({
+    ma5: true,
+    ma10: true,
+    ma20: true,
+    bollinger: true,
+    volumeAverage: true,
+    kd: true,
+    macd: true,
+  });
+  const [hoverIndex, setHoverIndex] = useState(null);
   const chartPoints = enrichIndicatorPoints(points);
   const width = 1120;
   const height = 660;
@@ -1721,7 +1696,7 @@ function MarketIndicatorChart({ points, t }) {
   const xStep = innerWidth / Math.max(chartPoints.length - 1, 1);
   const candleWidth = Math.max(4, Math.min(14, xStep * 0.55));
   const priceValues = chartPoints
-    .flatMap((point) => [point.high, point.low, point.ma5, point.ma20, point.bb_upper, point.bb_lower])
+    .flatMap((point) => [point.high, point.low, point.ma5, point.ma10, point.ma20, point.bb_upper, point.bb_lower])
     .filter((value) => value != null && !Number.isNaN(Number(value)));
   const rawMaxPrice = Math.max(...priceValues);
   const rawMinPrice = Math.min(...priceValues);
@@ -1745,6 +1720,7 @@ function MarketIndicatorChart({ points, t }) {
   const yKD = (value) => kdTop + kdHeight - (value / 100) * kdHeight;
   const yMacd = (value) => macdTop + macdHeight / 2 - (value / macdAbs) * (macdHeight / 2);
   const ma5Path = linePath(chartPoints, (point) => point.ma5, xAt, yPrice);
+  const ma10Path = linePath(chartPoints, (point) => point.ma10, xAt, yPrice);
   const ma20Path = linePath(chartPoints, (point) => point.ma20, xAt, yPrice);
   const bbUpperPath = linePath(chartPoints, (point) => point.bb_upper, xAt, yPrice);
   const bbLowerPath = linePath(chartPoints, (point) => point.bb_lower, xAt, yPrice);
@@ -1756,6 +1732,29 @@ function MarketIndicatorChart({ points, t }) {
   const signalPath = linePath(chartPoints, (point) => point.macd_signal, xAt, yMacd);
   const firstDate = chartPoints[0].date;
   const lastDate = chartPoints[chartPoints.length - 1].date;
+  const activeIndex = Math.min(Math.max(hoverIndex ?? chartPoints.length - 1, 0), chartPoints.length - 1);
+  const activePoint = chartPoints[activeIndex];
+  const activeX = xAt(activeIndex);
+  const indicatorToggles = [
+    ["ma5", "MA5"],
+    ["ma10", "MA10"],
+    ["ma20", "MA20"],
+    ["bollinger", t.chartBollingerBands],
+    ["volumeAverage", t.chartVolumeAverage],
+    ["kd", "KD"],
+    ["macd", "MACD"],
+  ];
+
+  function toggleSeries(key) {
+    setVisibleSeries((current) => ({ ...current, [key]: !current[key] }));
+  }
+
+  function handlePointerMove(event) {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const svgX = ((event.clientX - rect.left) / rect.width) * width;
+    const nextIndex = Math.round((svgX - left) / xStep);
+    setHoverIndex(Math.min(Math.max(nextIndex, 0), chartPoints.length - 1));
+  }
 
   return (
     <div className="rounded border border-zinc-800 bg-zinc-950 p-5">
@@ -1767,16 +1766,32 @@ function MarketIndicatorChart({ points, t }) {
         <div className="flex flex-wrap justify-end gap-x-4 gap-y-2 text-xs text-zinc-400">
           <ChartLegendItem color="bg-emerald-300" label={t.chartCandles} />
           <ChartLegendItem color="bg-amber-300" label="MA5" />
+          <ChartLegendItem color="bg-cyan-300" label="MA10" />
           <ChartLegendItem color="bg-sky-300" label="MA20" />
           <ChartLegendItem color="bg-violet-300" label={t.chartBollingerBands} />
           <ChartLegendItem color="bg-zinc-400" label={t.chartVolumeAverage} />
         </div>
+      </div>
+      <div className="mb-4 flex flex-wrap gap-3 border border-zinc-800 bg-zinc-900/60 p-3 text-xs text-zinc-300">
+        {indicatorToggles.map(([key, label]) => (
+          <label key={key} className="inline-flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={visibleSeries[key]}
+              onChange={() => toggleSeries(key)}
+              className="accent-amber-300"
+            />
+            <span>{label}</span>
+          </label>
+        ))}
       </div>
       <svg
         className="h-[660px] w-full"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={t.technicalChartTitle}
+        onMouseMove={handlePointerMove}
+        onFocus={() => setHoverIndex(activeIndex)}
       >
         <ChartPanelLabel x="12" y={priceTop + 16} label="PRICE" />
         <ChartPanelLabel x="12" y={volumeTop + 16} label="VOL" />
@@ -1811,9 +1826,9 @@ function MarketIndicatorChart({ points, t }) {
         <text x={left} y={kdTop + 14} className="fill-zinc-500 text-[11px]">100</text>
         <text x={left} y={kdTop + kdHeight - 6} className="fill-zinc-500 text-[11px]">0</text>
 
-        {bbArea ? <path d={bbArea} fill="rgba(167, 139, 250, 0.12)" stroke="none" /> : null}
-        {bbUpperPath ? <path d={bbUpperPath} fill="none" stroke="#a78bfa" strokeWidth="1.4" strokeDasharray="6 6" /> : null}
-        {bbLowerPath ? <path d={bbLowerPath} fill="none" stroke="#a78bfa" strokeWidth="1.4" strokeDasharray="6 6" /> : null}
+        {visibleSeries.bollinger && bbArea ? <path d={bbArea} fill="rgba(167, 139, 250, 0.12)" stroke="none" /> : null}
+        {visibleSeries.bollinger && bbUpperPath ? <path d={bbUpperPath} fill="none" stroke="#a78bfa" strokeWidth="1.4" strokeDasharray="6 6" /> : null}
+        {visibleSeries.bollinger && bbLowerPath ? <path d={bbLowerPath} fill="none" stroke="#a78bfa" strokeWidth="1.4" strokeDasharray="6 6" /> : null}
 
         {chartPoints.map((point, index) => {
           const x = xAt(index);
@@ -1846,24 +1861,36 @@ function MarketIndicatorChart({ points, t }) {
                 height={volumeTop + volumeHeight - yVolume(point.volume)}
                 className={up ? "fill-emerald-500/45" : "fill-red-500/45"}
               />
-              <rect
-                x={x - candleWidth / 2}
-                y={point.macd_hist >= 0 ? yMacd(point.macd_hist) : yMacd(0)}
-                width={candleWidth}
-                height={Math.max(Math.abs(yMacd(point.macd_hist || 0) - yMacd(0)), 1)}
-                className={point.macd_hist >= 0 ? "fill-emerald-400/50" : "fill-red-400/50"}
-              />
+              {visibleSeries.macd ? (
+                <rect
+                  x={x - candleWidth / 2}
+                  y={point.macd_hist >= 0 ? yMacd(point.macd_hist) : yMacd(0)}
+                  width={candleWidth}
+                  height={Math.max(Math.abs(yMacd(point.macd_hist || 0) - yMacd(0)), 1)}
+                  className={point.macd_hist >= 0 ? "fill-emerald-400/50" : "fill-red-400/50"}
+                />
+              ) : null}
             </g>
           );
         })}
 
-        {ma5Path ? <path d={ma5Path} fill="none" className="stroke-amber-300" strokeWidth="2.2" /> : null}
-        {ma20Path ? <path d={ma20Path} fill="none" className="stroke-sky-300" strokeWidth="2.2" /> : null}
-        {volumeMA20Path ? <path d={volumeMA20Path} fill="none" className="stroke-zinc-400" strokeWidth="1.8" /> : null}
-        {kPath ? <path d={kPath} fill="none" className="stroke-amber-300" strokeWidth="2" /> : null}
-        {dPath ? <path d={dPath} fill="none" className="stroke-sky-300" strokeWidth="2" /> : null}
-        {macdPath ? <path d={macdPath} fill="none" className="stroke-emerald-300" strokeWidth="2" /> : null}
-        {signalPath ? <path d={signalPath} fill="none" className="stroke-red-300" strokeWidth="2" /> : null}
+        {visibleSeries.ma5 && ma5Path ? <path d={ma5Path} fill="none" className="stroke-amber-300" strokeWidth="2.2" /> : null}
+        {visibleSeries.ma10 && ma10Path ? <path d={ma10Path} fill="none" className="stroke-cyan-300" strokeWidth="2.2" /> : null}
+        {visibleSeries.ma20 && ma20Path ? <path d={ma20Path} fill="none" className="stroke-sky-300" strokeWidth="2.2" /> : null}
+        {visibleSeries.volumeAverage && volumeMA20Path ? <path d={volumeMA20Path} fill="none" className="stroke-zinc-400" strokeWidth="1.8" /> : null}
+        {visibleSeries.kd && kPath ? <path d={kPath} fill="none" className="stroke-amber-300" strokeWidth="2" /> : null}
+        {visibleSeries.kd && dPath ? <path d={dPath} fill="none" className="stroke-sky-300" strokeWidth="2" /> : null}
+        {visibleSeries.macd && macdPath ? <path d={macdPath} fill="none" className="stroke-emerald-300" strokeWidth="2" /> : null}
+        {visibleSeries.macd && signalPath ? <path d={signalPath} fill="none" className="stroke-red-300" strokeWidth="2" /> : null}
+
+        <line x1={activeX} x2={activeX} y1={priceTop} y2={macdTop + macdHeight} className="stroke-amber-200/50" strokeDasharray="4 6" />
+        <circle cx={activeX} cy={yPrice(activePoint.close)} r="4" className="fill-amber-200" />
+        <ChartHoverTooltip
+          point={activePoint}
+          x={activeX > width - 280 ? activeX - 260 : activeX + 14}
+          y={priceTop + 16}
+          t={t}
+        />
 
         <text x={left} y={height - 5} className="fill-zinc-500 text-[11px]">
           {firstDate}
@@ -1872,14 +1899,61 @@ function MarketIndicatorChart({ points, t }) {
           {lastDate}
         </text>
         <text x={width - right - 155} y={priceTop + 14} className="fill-amber-300 text-[11px]">MA5</text>
-        <text x={width - right - 120} y={priceTop + 14} className="fill-sky-300 text-[11px]">MA20</text>
-        <text x={width - right - 78} y={priceTop + 14} className="fill-violet-300 text-[11px]">BB</text>
+        <text x={width - right - 120} y={priceTop + 14} className="fill-cyan-300 text-[11px]">MA10</text>
+        <text x={width - right - 76} y={priceTop + 14} className="fill-sky-300 text-[11px]">MA20</text>
+        <text x={width - right - 32} y={priceTop + 14} className="fill-violet-300 text-[11px]">BB</text>
         <text x={width - right - 145} y={kdTop + 14} className="fill-amber-300 text-[11px]">K</text>
         <text x={width - right - 125} y={kdTop + 14} className="fill-sky-300 text-[11px]">D</text>
         <text x={width - right - 145} y={macdTop + 14} className="fill-emerald-300 text-[11px]">DIF</text>
         <text x={width - right - 105} y={macdTop + 14} className="fill-red-300 text-[11px]">Signal</text>
       </svg>
     </div>
+  );
+}
+
+function ChartHoverTooltip({ point, x, y, t }) {
+  const rows = [
+    [t.chartOpen, formatTooltipNumber(point.open)],
+    [t.chartHigh, formatTooltipNumber(point.high)],
+    [t.chartLow, formatTooltipNumber(point.low)],
+    [t.chartClose, formatTooltipNumber(point.close)],
+    [t.chartVolume, formatCompactVolume(point.volume)],
+    ["MA5", formatTooltipNumber(point.ma5)],
+    ["MA10", formatTooltipNumber(point.ma10)],
+    ["MA20", formatTooltipNumber(point.ma20)],
+    ["BB", `${formatTooltipNumber(point.bb_upper)} / ${formatTooltipNumber(point.bb_lower)}`],
+    ["RSI", formatTooltipNumber(point.rsi, 1)],
+    ["KD", `${formatTooltipNumber(point.k, 1)} / ${formatTooltipNumber(point.d, 1)}`],
+    ["MACD", `${formatTooltipNumber(point.macd, 3)} / ${formatTooltipNumber(point.macd_signal, 3)} / ${formatTooltipNumber(point.macd_hist, 3)}`],
+  ];
+  const rowHeight = 17;
+  const tooltipWidth = 242;
+  const tooltipHeight = 34 + rows.length * rowHeight;
+
+  return (
+    <g>
+      <rect
+        x={x}
+        y={y}
+        width={tooltipWidth}
+        height={tooltipHeight}
+        rx="4"
+        className="fill-zinc-950 stroke-amber-300/60"
+      />
+      <text x={x + 12} y={y + 18} className="fill-amber-200 text-[12px] font-semibold">
+        {point.date}
+      </text>
+      {rows.map(([label, value], index) => (
+        <g key={label}>
+          <text x={x + 12} y={y + 38 + index * rowHeight} className="fill-zinc-500 text-[11px]">
+            {label}
+          </text>
+          <text x={x + 105} y={y + 38 + index * rowHeight} className="fill-zinc-100 text-[11px]">
+            {value}
+          </text>
+        </g>
+      ))}
+    </g>
   );
 }
 
@@ -1896,14 +1970,17 @@ function enrichIndicatorPoints(points) {
   const closes = points.map((point) => Number(point.close));
   return points.map((point, index) => {
     const closeWindow5 = closes.slice(Math.max(0, index - 4), index + 1);
+    const closeWindow10 = closes.slice(Math.max(0, index - 9), index + 1);
     const closeWindow20 = closes.slice(Math.max(0, index - 19), index + 1);
     const ma5 = point.ma5 ?? average(closeWindow5);
+    const ma10 = point.ma10 ?? average(closeWindow10);
     const ma20 = point.ma20 ?? average(closeWindow20);
     const std20 = stddev(closeWindow20);
 
     return {
       ...point,
       ma5,
+      ma10,
       ma20,
       bb_middle: point.bb_middle ?? ma20,
       bb_upper: point.bb_upper ?? ma20 + std20 * 2,
@@ -2285,6 +2362,13 @@ function formatCompactVolume(value) {
     return `${(value / 1_000).toFixed(1)}K`;
   }
   return String(Math.round(value));
+}
+
+function formatTooltipNumber(value, digits = 2) {
+  if (value == null || Number.isNaN(Number(value))) {
+    return "N/A";
+  }
+  return Number(value).toFixed(digits);
 }
 
 function linePath(points, accessor, xAt, yAt) {

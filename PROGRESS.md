@@ -714,3 +714,34 @@
 
 ### 下一步
 - 若時間允許，可再把 Practice 頁面的隨機題切換做成題目佇列與難度標籤，強化刷題節奏。
+## 2026-07-21 Practice 圖表互動、新聞題材與個人化教練回饋
+
+### 做了什麼
+- 將截圖中那排獨立技術摘要卡移除，改成把開高低收、成交量、MA5、MA10、MA20、布林通道、RSI、KD、MACD 全部整合到 K 線圖 hover tooltip。
+- 在技術圖表上加入指標 checkbox，可個別顯示/隱藏 MA5、MA10、MA20、布林通道、量均線、KD、MACD。
+- 擴大隨機題庫標的池，加入更多中小型/高波動美股、加密貨幣與台股，不再只抽大型知名股。
+- 練習題新增新聞/題材面，包含公司切入領域、業務描述與 as-of 前可用新聞；抓不到歷史新聞時明確顯示不可得，避免把未來新聞塞進歷史題。
+- 歷史基本面改成優先抓 as-of 前季度財務資料；若 yfinance 沒有可靠歷史財報 backfill，隱藏最新估值/營收數字並顯示 fallback 說明，避免未來資料穿越。
+- 教練回饋改成解析使用者的作答理由與權重，會引用使用者原文片段並辨識 MA/布林/MACD/成交量/新聞題材/AI 等訊號，降低罐頭回答感。
+
+### 關鍵決定
+- 保留資料模型中的 `chip` 欄位以相容舊紀錄，但練習 UI 不再把籌碼 proxy 當作正式面向；價量訊號統一放在 K 線圖與技術面內。
+- 新聞面若沒有題目日期前的 yfinance headline，寧可顯示「Historical news unavailable」，也不顯示題目日期之後的新聞。
+- 基本面若沒有歷史季度財務欄位，寧可退回背景 proxy，也不在歷史題中展示最新 PE/市值造成訓練污染。
+
+### 遇到的問題
+- yfinance 的 current news 與 current profile 容易讓歷史題偷看到未來資訊；已針對 headline 與財務數字做 cutoff/fallback 防護。
+- in-app browser 會出現 Statsig 網路錯誤訊息，但不影響本機 app 驗證；Practice 頁載入與互動正常。
+- Windows sandbox 會擋 Vitest/Vite 讀取設定檔，因此前端測試與 build 需使用提升權限執行。
+
+### 驗收測試
+- `..\.venv\Scripts\python.exe -m pytest tests\test_practice.py -q`：10 passed，1 warning。
+- `..\.venv\Scripts\python.exe -m pytest -q`：33 passed，1 warning。
+- `npm.cmd test -- --run`：10 passed。
+- `npm.cmd run build`：成功。
+- `git diff --check`：無 whitespace error，只有 Windows LF/CRLF 提示。
+- in-app browser：確認 Practice 不再顯示舊的籌碼/價量摘要卡；圖表 hover 日期會跟著游標移動；MA10 與指標 checkbox 正常；未來 Yahoo 新聞不會出現在歷史題；送出含 MACD/新聞/AI 的理由後，教練回饋有引用並解析該理由。
+
+### 下一步
+- 可進一步補歷史新聞資料源或匯入靜態新聞事件資料集，讓新聞/題材面更接近真正 point-in-time。
+- 若要做比賽影片，建議重錄 Practice 片段，強調「歷史防穿越、圖表 tooltip、個人化教練」三個亮點。

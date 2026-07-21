@@ -55,6 +55,7 @@ class MarketIndicatorPoint(BaseModel):
     volume_ma5: float | None = None
     volume_ma20: float | None = None
     ma5: float | None = None
+    ma10: float | None = None
     ma20: float | None = None
     bb_middle: float | None = None
     bb_upper: float | None = None
@@ -86,6 +87,7 @@ class PracticeQuestion(BaseModel):
     market_window: list[MarketIndicatorPoint] = []
     technical_snapshot: list[SnapshotMetric] = []
     fundamental_snapshot: list[SnapshotMetric] = []
+    news_snapshot: list[SnapshotMetric] = []
     chip_snapshot: list[SnapshotMetric] = []
     ai_snapshot: AiSnapshot | None = None
     data_cutoff_note: str = ""
@@ -182,7 +184,34 @@ class PracticeValidationError(ValueError):
     pass
 
 
-RANDOM_PRACTICE_TICKERS = ["NVDA", "AAPL", "TSLA", "MSFT", "BTC-USD", "2330.TW"]
+RANDOM_PRACTICE_TICKERS = [
+    "NVDA",
+    "AAPL",
+    "TSLA",
+    "MSFT",
+    "AMD",
+    "INTC",
+    "PLTR",
+    "SOFI",
+    "RIVN",
+    "COIN",
+    "SHOP",
+    "ROKU",
+    "NET",
+    "DDOG",
+    "SNOW",
+    "UBER",
+    "BA",
+    "PFE",
+    "PYPL",
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "2330.TW",
+    "2317.TW",
+    "2454.TW",
+    "2303.TW",
+]
 PRACTICE_HORIZONS = [1, 7, 30]
 
 
@@ -329,9 +358,11 @@ def analyze_practice_attempt(
     weights_map = weights.model_dump()
     top_dimension = max(weights_map, key=weights_map.get)
 
-    has_number = bool(re.search(r"\d|%|rsi|kd|macd|ma|pe|margin|volume|量|均線|本益比|營收|籌碼|ai", normalized))
+    has_number = bool(re.search(r"\d|%|rsi|kd|macd|ma|pe|margin|volume|量|均線|本益比|營收|新聞|題材|ai", normalized))
     has_counter = any(token in normalized for token in ["but", "however", "risk", "counter", "雖然", "但是", "風險", "反方"])
     is_short = len(rationale.strip()) < 24
+    signal_labels = _rationale_signal_labels(normalized)
+    rationale_excerpt = _rationale_excerpt(rationale)
 
     causes: list[str] = []
     steps: list[str] = []
@@ -343,6 +374,14 @@ def analyze_practice_attempt(
         causes.append(_text(zh, "理由太短，還看不出你真正依據哪一個可驗證訊號。", "The rationale is too short to reveal the signal you relied on."))
         steps.append(_text(zh, "下一題請至少寫出一個主訊號、一個反方風險，以及你給這個信心度的原因。", "Next time, write one main signal, one counter-risk, and why the confidence level fits."))
         tags.append("rationale depth")
+    elif signal_labels:
+        good.append(
+            _text(
+                zh,
+                f"你的理由「{rationale_excerpt}」明確使用了：{'、'.join(signal_labels)}。",
+                f"Your rationale, \"{rationale_excerpt}\", explicitly used: {', '.join(signal_labels)}.",
+            )
+        )
 
     if not has_number:
         causes.append(_text(zh, "理由缺少數字或指標錨點，容易變成感覺式判斷。", "The rationale lacks numeric or indicator anchors, so it can become impression-driven."))
@@ -350,6 +389,21 @@ def analyze_practice_attempt(
         tags.append("evidence")
     else:
         good.append(_text(zh, "你有嘗試把判斷連回具體資料，這是可回測訓練的核心。", "You connected the judgment to concrete data, which is the core of backtestable practice."))
+
+    if weights.technical >= 35 and not _mentions_any(normalized, ["rsi", "kd", "macd", "ma", "boll", "bb", "均線", "布林", "量", "volume"]):
+        causes.append(_text(zh, "你給技術面較高權重，但理由沒有點名圖表上的技術訊號。", "You gave technicals meaningful weight, but the rationale did not name a chart signal."))
+        steps.append(_text(zh, "下次請在理由中引用游標 tooltip 裡的一個具體技術數字。", "Next time, cite one concrete number from the chart tooltip."))
+        tags.append("technical evidence")
+
+    if weights.fundamental >= 25 and not _mentions_any(normalized, ["pe", "margin", "revenue", "growth", "news", "theme", "sector", "題材", "新聞", "營收", "本益比", "毛利", "產業"]):
+        causes.append(_text(zh, "你給基本/新聞面權重，但理由沒有說明公司切入領域、財務或新聞題材。", "You weighted fundamentals/news, but did not explain the business lane, financials, or news theme."))
+        steps.append(_text(zh, "下次請把基本面寫成：公司在做什麼、最近題材是什麼、這和目標週期有什麼關係。", "Next time, write: what the company does, the recent theme, and why it matters for the horizon."))
+        tags.append("fundamental/news evidence")
+
+    if weights.ai >= 30 and not _mentions_any(normalized, ["ai", "模型", "人工智慧", "thesis", "敘事", "narrative"]):
+        causes.append(_text(zh, "你分配了 AI 面權重，但理由沒有說明你採納或反駁 AI 論點的原因。", "You assigned AI weight, but did not explain why you accepted or rejected the AI thesis."))
+        steps.append(_text(zh, "下次請寫出 AI 論點的一個可驗證部分，以及一個可能讓 AI 錯的條件。", "Next time, write one verifiable part of the AI thesis and one condition that would make it wrong."))
+        tags.append("AI thesis use")
 
     if not has_counter:
         causes.append(_text(zh, "理由沒有處理反方訊號，容易形成確認偏誤。", "The rationale does not handle opposing evidence, which can create confirmation bias."))
@@ -360,8 +414,11 @@ def analyze_practice_attempt(
 
     if weights.ai >= 45 and ai_side == selected_side:
         causes.append(_text(zh, "AI 面權重偏高且你與 AI 同邊，請確認這是被證據說服，不是盲從 AI。", "AI weight is high and you matched AI; verify that evidence convinced you, not AI authority alone."))
-        steps.append(_text(zh, "下次請明確寫出：AI 論點和技術/基本/籌碼哪一項互相驗證。", "Next time, state which technical, fundamental, or chip signal validates the AI thesis."))
+        steps.append(_text(zh, "下次請明確寫出：AI 論點和技術/基本/新聞題材哪一項互相驗證。", "Next time, state which technical, fundamental, or news/theme signal validates the AI thesis."))
         tags.append("AI reliance")
+
+    if ai_side and selected_side != ai_side and _mentions_any(normalized, ["ai", "模型", "人工智慧", "thesis", "敘事", "narrative"]):
+        good.append(_text(zh, "你有意識地沒有盲從 AI，這對訓練獨立判斷很重要。", "You consciously did not follow AI blindly, which is important for independent judgment."))
 
     if max(weights_map.values()) >= 60:
         causes.append(_text(zh, f"{_dimension_label(top_dimension, zh)}權重過高，可能忽略其他面向。", f"{_dimension_label(top_dimension, zh)} weight is very high, which may crowd out other dimensions."))
@@ -384,10 +441,14 @@ def analyze_practice_attempt(
         steps.append(_text(zh, "維持三段式：主訊號、反方風險、信心校準。", "Keep the three-part structure: main signal, opposing risk, confidence calibration."))
 
     summary = _feedback_summary(case, selected_side, result, confidence, zh)
-    diagnosis = _text(
-        zh,
-        "結果正確但理由仍要看證據品質；結果錯誤時，重點是找出哪個面向被高估或低估。",
-        "A correct result still needs evidence quality; a wrong result should reveal which dimension was over- or underweighted.",
+    diagnosis = _feedback_diagnosis(
+        case=case,
+        selected_side=selected_side,
+        confidence=confidence,
+        weights=weights,
+        signal_labels=signal_labels,
+        result=result,
+        zh=zh,
     )
     return PracticeFeedback(
         summary=summary,
@@ -398,11 +459,7 @@ def analyze_practice_attempt(
         missed_signals=_dedupe(missed)[:4],
         good_reasoning=_dedupe(good)[:4],
         next_drill_focus=_next_drill_focus(tags, zh),
-        suggested_framework=_text(
-            zh,
-            "先判斷技術趨勢，再查基本面是否支持，接著看籌碼 proxy 是否確認，最後用 AI 面補足敘事與反方檢查。",
-            "Judge technical trend first, check whether fundamentals support it, use chip proxy for confirmation, then use AI for narrative and counterargument checks.",
-        ),
+        suggested_framework=_personalized_framework(weights, signal_labels, zh),
     )
 
 
@@ -422,7 +479,8 @@ def _case_from_points(
     answer_side = target_result.result_side
     outcome_pct = target_result.pct_change
     technical_snapshot = _technical_snapshot(selected, window)
-    fundamental_snapshot = _fundamental_snapshot(ticker) if use_live_fundamentals else _demo_fundamental_snapshot(ticker)
+    fundamental_snapshot = _fundamental_snapshot(ticker, as_of=selected.date) if use_live_fundamentals else _demo_fundamental_snapshot(ticker)
+    news_snapshot = _news_snapshot(ticker, as_of=selected.date) if use_live_fundamentals else _demo_news_snapshot(ticker, as_of=selected.date)
     chip_snapshot = _chip_snapshot(selected, window)
     ai_snapshot = _ai_snapshot(ticker, selected, window, technical_snapshot, fundamental_snapshot, chip_snapshot)
     bull_points, bear_points = _factor_clues(selected, window, ai_snapshot, False)
@@ -433,10 +491,10 @@ def _case_from_points(
     title_zh = f"歷史截面題：{ticker} 在 {selected.date}"
     scenario = (
         f"You are back on {selected.date}. Only information available through this date is visible. "
-        f"Use technical, fundamental, chip-proxy, and AI dimensions to judge the next {horizon} available trading day(s)."
+        f"Use technical, fundamental, news/theme, and AI dimensions to judge the next {horizon} available trading day(s)."
     )
     scenario_zh = (
-        f"你被放回 {selected.date}。畫面只顯示這一天以前可見的資訊，請整合技術面、基本面、籌碼 proxy 與 AI 面，"
+        f"你被放回 {selected.date}。畫面只顯示這一天以前可見的資訊，請整合技術面、基本面、新聞/題材與 AI 面，"
         f"判斷接下來 {horizon} 個可交易日的方向。"
     )
     data_note = f"Visible market data ends at {selected.date}. Future prices are hidden until submission. {source_note}"
@@ -463,19 +521,20 @@ def _case_from_points(
         horizon_days=horizon,
         scenario=scenario,
         scenario_zh=scenario_zh,
-        training_goal="Practice integrating technical, fundamental, chip-proxy, and AI analysis without future leakage.",
-        training_goal_zh="訓練你在沒有未來資料的情況下，整合技術面、基本面、籌碼 proxy 與 AI 面。",
+        training_goal="Practice integrating technical, fundamental, news/theme, and AI analysis without future leakage.",
+        training_goal_zh="訓練你在沒有未來資料的情況下，整合技術面、基本面、新聞/題材與 AI 面。",
         bull_points=bull_points,
         bull_points_zh=bull_points_zh,
         bear_points=bear_points,
         bear_points_zh=bear_points_zh,
         prompt=f"What is your {horizon}D directional judgment from this historical snapshot?",
         prompt_zh=f"只根據這個歷史截面，你對未來 {horizon} 日的方向判斷是什麼？",
-        focus_tags=["historical backtest", "technical", "fundamental", "chip proxy", "AI usage"],
+        focus_tags=["historical backtest", "technical", "fundamental", "news/theme", "AI usage"],
         indicator_summary=_indicator_summary(selected, window, language.startswith("zh")),
         market_window=window,
         technical_snapshot=technical_snapshot,
         fundamental_snapshot=fundamental_snapshot,
+        news_snapshot=news_snapshot,
         chip_snapshot=chip_snapshot,
         ai_snapshot=ai_snapshot,
         data_cutoff_note=data_note,
@@ -566,6 +625,7 @@ def _indicator_points(rows: list[dict[str, Any]]) -> list[MarketIndicatorPoint]:
         volume_window_5 = volumes[max(0, index - 4) : index + 1]
         volume_window_20 = volumes[max(0, index - 19) : index + 1]
         close_window_5 = closes[max(0, index - 4) : index + 1]
+        close_window_10 = closes[max(0, index - 9) : index + 1]
         close_window_20 = closes[max(0, index - 19) : index + 1]
         close_ma20 = sum(close_window_20) / len(close_window_20)
         bb_std = _stddev(close_window_20)
@@ -580,6 +640,7 @@ def _indicator_points(rows: list[dict[str, Any]]) -> list[MarketIndicatorPoint]:
                 volume_ma5=round(sum(volume_window_5) / len(volume_window_5), 2),
                 volume_ma20=round(sum(volume_window_20) / len(volume_window_20), 2),
                 ma5=round(sum(close_window_5) / len(close_window_5), 4),
+                ma10=round(sum(close_window_10) / len(close_window_10), 4),
                 ma20=round(close_ma20, 4),
                 bb_middle=round(close_ma20, 4),
                 bb_upper=round(close_ma20 + bb_std * 2, 4),
@@ -605,7 +666,7 @@ def _technical_snapshot(point: MarketIndicatorPoint, window: list[MarketIndicato
     return [
         SnapshotMetric(label="5D return", value=f"{pct5:+.2f}%", tone=_pct_tone(pct5)),
         SnapshotMetric(label="20D return", value=f"{pct20:+.2f}%", tone=_pct_tone(pct20)),
-        SnapshotMetric(label="MA5 / MA20", value=f"{point.ma5:.2f} / {point.ma20:.2f}", tone=ma_tone),
+        SnapshotMetric(label="MA5 / MA10 / MA20", value=f"{point.ma5:.2f} / {point.ma10:.2f} / {point.ma20:.2f}", tone=ma_tone),
         SnapshotMetric(label="Bollinger", value=_bollinger_position(point), detail="Close location relative to 20D bands.", tone=_bollinger_tone(point)),
         SnapshotMetric(label="RSI14", value=f"{point.rsi:.1f}", detail="Over 70 can be crowded; under 40 can be weak.", tone=rsi_tone),
         SnapshotMetric(label="KD", value=f"K {point.k:.1f} / D {point.d:.1f}", tone="bull" if (point.k or 0) > (point.d or 0) else "bear"),
@@ -614,18 +675,35 @@ def _technical_snapshot(point: MarketIndicatorPoint, window: list[MarketIndicato
     ]
 
 
-def _fundamental_snapshot(ticker: str) -> list[SnapshotMetric]:
+def _fundamental_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric]:
     if ticker == "DEMO":
         return _demo_fundamental_snapshot(ticker)
 
     try:
-        info = yf.Ticker(ticker).info
+        ticker_obj = yf.Ticker(ticker)
+        info = ticker_obj.info
     except Exception:
         info = {}
+        ticker_obj = None
     if not isinstance(info, dict):
         info = {}
 
     metrics: list[SnapshotMetric] = []
+    cutoff = _parse_iso_date(as_of) if as_of else None
+    if cutoff and ticker_obj is not None:
+        historical_metrics = _historical_financial_snapshot(ticker_obj, cutoff)
+        if historical_metrics:
+            return historical_metrics[:6]
+        return [
+            SnapshotMetric(
+                label="Historical financials",
+                value="As-of backfill unavailable",
+                detail="Current valuation and revenue ratios are hidden to avoid future leakage.",
+                tone="warn",
+            ),
+            *_demo_fundamental_snapshot(ticker)[:5],
+        ][:6]
+
     market_cap = _to_float(info.get("marketCap"))
     trailing_pe = _to_float(info.get("trailingPE"))
     forward_pe = _to_float(info.get("forwardPE"))
@@ -661,6 +739,137 @@ def _fundamental_snapshot(ticker: str) -> list[SnapshotMetric]:
     return metrics[:6]
 
 
+def _historical_financial_snapshot(ticker_obj: Any, cutoff: date) -> list[SnapshotMetric]:
+    try:
+        financials = ticker_obj.quarterly_financials
+    except Exception:
+        return []
+    if financials is None or bool(getattr(financials, "empty", True)):
+        return []
+
+    columns: list[tuple[date, Any]] = []
+    for column in list(getattr(financials, "columns", [])):
+        column_date = _financial_column_date(column)
+        if column_date and column_date <= cutoff:
+            columns.append((column_date, column))
+    columns.sort(key=lambda item: item[0], reverse=True)
+    if not columns:
+        return []
+
+    current_date, current_column = columns[0]
+    previous_column = columns[1][1] if len(columns) > 1 else None
+    revenue = _financial_value(financials, current_column, ["Total Revenue", "TotalRevenue"])
+    previous_revenue = _financial_value(financials, previous_column, ["Total Revenue", "TotalRevenue"]) if previous_column is not None else None
+    net_income = _financial_value(financials, current_column, ["Net Income", "NetIncome"])
+    operating_income = _financial_value(financials, current_column, ["Operating Income", "OperatingIncome", "EBIT"])
+
+    metrics = [
+        SnapshotMetric(
+            label="Financial period",
+            value=current_date.isoformat(),
+            detail="Latest quarterly financial period ending before the question cutoff; filing lag is approximated.",
+        )
+    ]
+    if revenue is not None:
+        metrics.append(SnapshotMetric(label="Revenue", value=_compact_number(revenue), detail="Quarterly statement value before cutoff."))
+    if previous_revenue not in (None, 0) and revenue is not None:
+        revenue_change = ((revenue - previous_revenue) / abs(previous_revenue)) * 100
+        metrics.append(SnapshotMetric(label="Revenue change", value=f"{revenue_change:+.1f}%", detail="Sequential change from the prior available quarter.", tone=_pct_tone(revenue_change)))
+    if net_income is not None:
+        metrics.append(SnapshotMetric(label="Net income", value=_compact_number(net_income), detail="Quarterly statement value before cutoff.", tone="bull" if net_income > 0 else "bear"))
+    if revenue not in (None, 0) and net_income is not None:
+        margin = (net_income / revenue) * 100
+        metrics.append(SnapshotMetric(label="Net margin", value=f"{margin:.1f}%", detail="Net income divided by revenue.", tone="bull" if margin > 15 else "bear" if margin < 0 else "neutral"))
+    if operating_income is not None:
+        metrics.append(SnapshotMetric(label="Operating income", value=_compact_number(operating_income), detail="Quarterly statement value before cutoff.", tone="bull" if operating_income > 0 else "bear"))
+    return metrics[:6]
+
+
+def _news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric]:
+    if ticker == "DEMO":
+        return _demo_news_snapshot(ticker, as_of=as_of)
+
+    try:
+        ticker_obj = yf.Ticker(ticker)
+        info = ticker_obj.info
+    except Exception:
+        info = {}
+        ticker_obj = None
+    if not isinstance(info, dict):
+        info = {}
+
+    metrics: list[SnapshotMetric] = []
+    sector = info.get("sector")
+    industry = info.get("industry")
+    summary = info.get("longBusinessSummary")
+
+    if sector or industry:
+        metrics.append(
+            SnapshotMetric(
+                label="Business lane",
+                value=" / ".join(str(item) for item in [sector, industry] if item),
+                detail="Current yfinance company profile; use as business context, not future price evidence.",
+            )
+        )
+    if isinstance(summary, str) and summary:
+        metrics.append(
+            SnapshotMetric(
+                label="What it does",
+                value=_short_text(summary, 96),
+                detail="Business context only; do not treat it as an as-of-date filing.",
+            )
+        )
+
+    news_items: list[Any] = []
+    if ticker_obj is not None:
+        try:
+            news_items = ticker_obj.news or []
+        except Exception:
+            news_items = []
+
+    cutoff = _parse_iso_date(as_of) if as_of else None
+    eligible_news: list[tuple[Any, date | None]] = []
+    for item in news_items:
+        published_at = _news_date(item)
+        if cutoff and published_at and published_at > cutoff:
+            continue
+        if cutoff and published_at and published_at < cutoff - timedelta(days=120):
+            continue
+        if cutoff and not published_at:
+            continue
+        eligible_news.append((item, published_at))
+
+    for item, published_at in eligible_news[:3]:
+        title = _news_title(item)
+        if not title:
+            continue
+        publisher = _news_publisher(item)
+        source_detail = publisher or "yfinance news item"
+        if published_at:
+            source_detail = f"{source_detail} · {published_at.isoformat()}"
+        metrics.append(
+            SnapshotMetric(
+                label="As-of news" if cutoff else "Recent news",
+                value=_short_text(title, 88),
+                detail=source_detail,
+                tone="neutral",
+            )
+        )
+
+    if not metrics:
+        metrics.extend(_demo_news_snapshot(ticker, as_of=as_of))
+    elif cutoff and not any(metric.label == "As-of news" for metric in metrics):
+        metrics.append(
+            SnapshotMetric(
+                label="Historical news",
+                value="No yfinance news available before the cutoff",
+                detail="The drill avoids showing later headlines that the past self could not know.",
+                tone="warn",
+            )
+        )
+    return metrics[:5]
+
+
 def _demo_fundamental_snapshot(ticker: str) -> list[SnapshotMetric]:
     profiles = {
         "NVDA": ("AI semiconductor leader", "Premium", "Strong"),
@@ -676,6 +885,43 @@ def _demo_fundamental_snapshot(ticker: str) -> list[SnapshotMetric]:
     ]
 
 
+def _demo_news_snapshot(ticker: str, as_of: str | None = None) -> list[SnapshotMetric]:
+    themes = {
+        "NVDA": ("AI accelerators", "Watch whether AI capex expectations are already priced in."),
+        "AAPL": ("Device cycle and services", "Short horizons often react to demand checks and ecosystem headlines."),
+        "TSLA": ("EV margins and autonomy", "Narrative can swing between growth optionality and pricing pressure."),
+        "MSFT": ("Cloud and AI software", "AI monetization and capex commentary can move sentiment."),
+        "AMD": ("AI GPU challenger", "Market watches whether accelerator share gains become visible revenue."),
+        "INTC": ("Foundry turnaround", "Execution milestones matter more than long-term ambition alone."),
+        "PLTR": ("AI software adoption", "Commercial growth narratives can reprice quickly."),
+        "SOFI": ("Fintech profitability", "Credit quality and member growth can dominate near-term reactions."),
+        "RIVN": ("EV production ramp", "Cash burn, deliveries, and guidance changes matter."),
+        "COIN": ("Crypto trading activity", "Crypto price momentum and regulation narratives feed volume expectations."),
+        "SHOP": ("Merchant commerce platform", "GMV growth and margin discipline are common catalysts."),
+        "ROKU": ("Streaming ad cycle", "Ad demand and platform monetization drive sentiment."),
+        "NET": ("Edge security growth", "Enterprise spend and AI traffic narratives can shift valuation."),
+        "DDOG": ("Cloud observability", "Cloud optimization cycles and usage growth are key themes."),
+        "SNOW": ("Data cloud consumption", "Consumption growth and AI data workloads shape expectations."),
+        "UBER": ("Mobility and delivery scale", "Margins, demand resilience, and capital returns matter."),
+        "BA": ("Aerospace execution risk", "Production quality and delivery cadence can outweigh valuation."),
+        "PFE": ("Pharma pipeline reset", "Pipeline updates and post-COVID revenue base matter."),
+        "PYPL": ("Payments turnaround", "Branded checkout growth and margin repair are central themes."),
+        "BTC-USD": ("Crypto liquidity cycle", "ETF flows, regulation, and leverage psychology often dominate."),
+        "ETH-USD": ("Smart-contract ecosystem", "Network activity, staking, and ETF narratives shape sentiment."),
+        "SOL-USD": ("High-beta crypto ecosystem", "Network usage and risk appetite can move quickly."),
+        "2330.TW": ("AI semiconductor manufacturing", "AI demand, capex, currency, and geopolitical risk all matter."),
+        "2317.TW": ("Electronics manufacturing", "AI server demand and margin mix are common themes."),
+        "2454.TW": ("Mobile and edge chips", "Phone cycle and networking demand affect revisions."),
+        "2303.TW": ("Foundry cycle", "Utilization, pricing, and mature-node demand are key."),
+    }
+    theme, detail = themes.get(ticker, ("Theme unavailable", "Use the news panel as context, not as a standalone signal."))
+    cutoff_detail = f"As-of {as_of}; yfinance does not provide reliable historical headline backfill here." if as_of else "Fallback item keeps the drill usable when yfinance news is unavailable."
+    return [
+        SnapshotMetric(label="Theme lens", value=theme, detail=detail),
+        SnapshotMetric(label="Historical news", value="No as-of headline available", detail=cutoff_detail, tone="warn"),
+    ]
+
+
 def _chip_snapshot(point: MarketIndicatorPoint, window: list[MarketIndicatorPoint]) -> list[SnapshotMetric]:
     pct5 = _window_pct(window, 5)
     pct20 = _window_pct(window, 20)
@@ -685,7 +931,7 @@ def _chip_snapshot(point: MarketIndicatorPoint, window: list[MarketIndicatorPoin
     divergence = "Price up without volume confirmation" if pct5 > 1 and volume_ratio < 0.9 else "Volume confirms move" if volume_ratio > 1.2 else "Mixed"
 
     return [
-        SnapshotMetric(label="Volume / 20D avg", value=f"{volume_ratio:.2f}x", detail="Chip proxy, not institutional flow.", tone="bull" if volume_ratio > 1.2 and pct5 > 0 else "bear" if volume_ratio > 1.2 and pct5 < 0 else "neutral"),
+        SnapshotMetric(label="Volume / 20D avg", value=f"{volume_ratio:.2f}x", detail="Price-volume read, not institutional flow.", tone="bull" if volume_ratio > 1.2 and pct5 > 0 else "bear" if volume_ratio > 1.2 and pct5 < 0 else "neutral"),
         SnapshotMetric(label="OBV 10D proxy", value=f"{obv_trend:+.2f}%", detail="Uses close direction x volume.", tone=_pct_tone(obv_trend)),
         SnapshotMetric(label="Close location", value=f"{close_location * 100:.0f}%", detail="Close position inside daily high-low range.", tone="bull" if close_location > 0.65 else "bear" if close_location < 0.35 else "neutral"),
         SnapshotMetric(label="Price-volume read", value=divergence, detail=f"5D {pct5:+.2f}%, 20D {pct20:+.2f}%.", tone="warn" if "without" in divergence else "neutral"),
@@ -727,7 +973,7 @@ def _ai_snapshot(
         checklist=[
             "Does the AI thesis cite a concrete signal?",
             "Does technical momentum agree with the AI side?",
-            "Does the chip proxy confirm or contradict the move?",
+            "Does news/theme context confirm or contradict the AI thesis?",
             "What evidence would make the AI thesis wrong?",
         ],
     )
@@ -772,10 +1018,10 @@ def _factor_clues(
         bull = [
             f"20 日報酬 {pct20:+.2f}%，若趨勢仍在均線上方，短期動能可能延續。",
             f"MACD Hist {point.macd_hist:+.3f}，可檢查動能是否正在修復或擴張。",
-            f"AI 面偏向{_side_label(ai_snapshot.suggested_side, True)}，但需要用技術/籌碼訊號交叉驗證。",
+            f"AI 面偏向{_side_label(ai_snapshot.suggested_side, True)}，但需要用技術與新聞/題材訊號交叉驗證。",
         ]
         bear = [
-            f"量能 {volume_ratio:.2f} 倍於 20 日均量，放量但無延續時容易代表籌碼鬆動。",
+            f"量能 {volume_ratio:.2f} 倍於 20 日均量，放量但無延續時要檢查是否只是短線賣壓。",
             f"RSI {point.rsi:.1f}，過熱或轉弱都會影響追價風險。",
             "若 AI 論點只描述敘事、沒有連到指標，應降低 AI 面權重。",
         ]
@@ -783,7 +1029,7 @@ def _factor_clues(
     bull = [
         f"20D return is {pct20:+.2f}%; if price holds above moving averages, momentum may persist.",
         f"MACD Hist is {point.macd_hist:+.3f}; check whether momentum is repairing or expanding.",
-        f"AI suggests {_side_label(ai_snapshot.suggested_side, False)}, but it should be cross-checked against technical and chip signals.",
+        f"AI suggests {_side_label(ai_snapshot.suggested_side, False)}, but it should be cross-checked against technical and news/theme signals.",
     ]
     bear = [
         f"Volume is {volume_ratio:.2f}x the 20D average; high volume without follow-through can show weak hands.",
@@ -1148,6 +1394,112 @@ def _compact_number(value: float) -> str:
     return f"{value:.0f}"
 
 
+def _short_text(value: Any, max_length: int = 100) -> str:
+    text = re.sub(r"\s+", " ", str(value or "")).strip()
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1].rstrip()}..."
+
+
+def _news_title(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    return str(item.get("title") or content.get("title") or "").strip()
+
+
+def _news_publisher(item: Any) -> str:
+    if not isinstance(item, dict):
+        return ""
+    content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    provider = content.get("provider") if isinstance(content.get("provider"), dict) else {}
+    publisher = item.get("publisher") or item.get("provider") or provider.get("displayName") or provider.get("name")
+    published = item.get("providerPublishTime") or content.get("pubDate") or content.get("displayTime")
+    parts = [str(publisher).strip()] if publisher else []
+    if published:
+        parts.append(str(published).strip())
+    return " · ".join(parts)
+
+
+def _parse_iso_date(value: Any) -> date | None:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(str(value)[:10]).date()
+    except ValueError:
+        return None
+
+
+def _news_date(item: Any) -> date | None:
+    if not isinstance(item, dict):
+        return None
+    content = item.get("content") if isinstance(item.get("content"), dict) else {}
+    candidates = [
+        item.get("providerPublishTime"),
+        item.get("publishTime"),
+        content.get("providerPublishTime"),
+        content.get("pubDate"),
+        content.get("displayTime"),
+    ]
+    for candidate in candidates:
+        if candidate in (None, ""):
+            continue
+        if isinstance(candidate, (int, float)):
+            timestamp = candidate / 1000 if candidate > 10_000_000_000 else candidate
+            try:
+                return datetime.fromtimestamp(timestamp, tz=timezone.utc).date()
+            except (OSError, OverflowError, ValueError):
+                continue
+        text = str(candidate).strip()
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).date()
+        except ValueError:
+            parsed = _parse_iso_date(text)
+            if parsed:
+                return parsed
+    return None
+
+
+def _financial_column_date(value: Any) -> date | None:
+    if hasattr(value, "date"):
+        try:
+            return value.date()
+        except TypeError:
+            pass
+    return _parse_iso_date(value)
+
+
+def _financial_value(financials: Any, column: Any, row_names: list[str]) -> float | None:
+    if column is None:
+        return None
+    try:
+        index_values = list(getattr(financials, "index", []))
+    except TypeError:
+        index_values = []
+    normalized_rows = {_normalize_financial_label(label): label for label in index_values}
+    for row_name in row_names:
+        row_label = row_name if row_name in index_values else normalized_rows.get(_normalize_financial_label(row_name))
+        if row_label is None:
+            continue
+        try:
+            value = financials.loc[row_label, column]
+        except Exception:
+            continue
+        if hasattr(value, "iloc"):
+            try:
+                value = value.iloc[0]
+            except Exception:
+                return None
+        parsed = _to_float(value)
+        if parsed is not None:
+            return parsed
+    return None
+
+
+def _normalize_financial_label(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]", "", str(value).lower())
+
+
 def _to_float(value: Any) -> float | None:
     try:
         number = float(value)
@@ -1217,9 +1569,105 @@ def _side_label(side: VerdictSide, zh: bool) -> str:
 
 
 def _dimension_label(dimension: str, zh: bool) -> str:
-    zh_labels = {"technical": "技術面", "fundamental": "基本面", "chip": "籌碼 proxy", "ai": "AI 面"}
-    en_labels = {"technical": "Technical", "fundamental": "Fundamental", "chip": "Chip proxy", "ai": "AI"}
+    zh_labels = {"technical": "技術面", "fundamental": "基本面", "chip": "價量觀察", "ai": "AI 面"}
+    en_labels = {"technical": "Technical", "fundamental": "Fundamental", "chip": "Price-volume read", "ai": "AI"}
     return (zh_labels if zh else en_labels).get(dimension, dimension)
+
+
+def _rationale_signal_labels(normalized: str) -> list[str]:
+    signals: list[tuple[str, list[str]]] = [
+        ("MA/均線", ["ma", "均線"]),
+        ("MA10", ["ma10", "10 日", "10日"]),
+        ("Bollinger/布林", ["boll", "bb", "布林"]),
+        ("RSI", ["rsi"]),
+        ("KD", ["kd", " k ", " d "]),
+        ("MACD", ["macd", "dif", "signal"]),
+        ("成交量", ["volume", "量能", "成交量", "放量"]),
+        ("估值", ["pe", "valuation", "估值", "本益比"]),
+        ("營收/成長", ["revenue", "growth", "margin", "營收", "成長", "毛利", "利潤"]),
+        ("新聞/題材", ["news", "theme", "headline", "新聞", "題材", "消息"]),
+        ("AI", ["ai", "模型", "人工智慧", "thesis", "敘事", "narrative"]),
+    ]
+    result: list[str] = []
+    padded = f" {normalized} "
+    for label, tokens in signals:
+        if any(token in padded for token in tokens):
+            result.append(label)
+    return _dedupe(result)
+
+
+def _mentions_any(normalized: str, tokens: list[str]) -> bool:
+    padded = f" {normalized} "
+    return any(token in padded for token in tokens)
+
+
+def _rationale_excerpt(rationale: str, max_length: int = 64) -> str:
+    text = re.sub(r"\s+", " ", rationale.strip())
+    if len(text) <= max_length:
+        return text
+    return f"{text[: max_length - 1].rstrip()}..."
+
+
+def _feedback_diagnosis(
+    case: PracticeCase,
+    selected_side: VerdictSide,
+    confidence: int,
+    weights: JudgmentWeights,
+    signal_labels: list[str],
+    result: bool,
+    zh: bool,
+) -> str:
+    weights_map = weights.model_dump()
+    top_dimension = max(weights_map, key=weights_map.get)
+    signal_text = "、".join(signal_labels) if zh else ", ".join(signal_labels)
+    if not signal_text:
+        signal_text = _text(zh, "未偵測到明確訊號", "no explicit signal detected")
+    ai_side = case.ai_snapshot.suggested_side if case.ai_snapshot else None
+    ai_relation = ""
+    if ai_side:
+        ai_relation = _text(
+            zh,
+            f"你和 AI {'同邊' if selected_side == ai_side else '不同邊'}。",
+            f"You {'matched' if selected_side == ai_side else 'differed from'} AI.",
+        )
+    outcome_text = _text(zh, "答對" if result else "待加強", "correct" if result else "needs work")
+    if zh:
+        return (
+            f"本次你選{_side_label(selected_side, True)}、信心 {confidence}/5，最高權重是"
+            f"{_dimension_label(top_dimension, True)} {weights_map[top_dimension]}%。理由偵測到：{signal_text}。"
+            f"{ai_relation} 這題結果為{outcome_text}，請回看你高權重面向是否真的有被理由支撐。"
+        )
+    return (
+        f"You chose {_side_label(selected_side, False)} with {confidence}/5 confidence. Your highest weight was "
+        f"{_dimension_label(top_dimension, False)} at {weights_map[top_dimension]}%. Detected signals: {signal_text}. "
+        f"{ai_relation} Result: {outcome_text}. Check whether the high-weight dimension was actually supported by your rationale."
+    )
+
+
+def _personalized_framework(weights: JudgmentWeights, signal_labels: list[str], zh: bool) -> str:
+    weights_map = weights.model_dump()
+    top_dimension = max(weights_map, key=weights_map.get)
+    missing_news = "新聞/題材" not in signal_labels
+    missing_ai = "AI" not in signal_labels
+    if zh:
+        parts = [
+            f"先用{_dimension_label(top_dimension, True)}建立主假說",
+            "再用圖表 tooltip 的具體數字驗證",
+        ]
+        if missing_news:
+            parts.append("補一條基本/新聞題材是否支持此假說")
+        if missing_ai:
+            parts.append("最後寫出 AI 論點哪裡可採、哪裡可能錯")
+        return "，".join(parts) + "。"
+    parts = [
+        f"Start with {_dimension_label(top_dimension, False)} as the main thesis",
+        "validate it with a concrete chart-tooltip number",
+    ]
+    if missing_news:
+        parts.append("add one fundamental/news theme that supports or rejects it")
+    if missing_ai:
+        parts.append("then state which part of the AI thesis is useful and how it could be wrong")
+    return ", ".join(parts) + "."
 
 
 def _feedback_summary(case: PracticeCase, selected_side: VerdictSide, result: bool, confidence: int, zh: bool) -> str:
@@ -1255,19 +1703,19 @@ def _missed_signals(case: PracticeCase, zh: bool) -> list[str]:
         signals.append(_text(zh, f"AI 面建議為{_side_label(case.ai_snapshot.suggested_side, True)}，但仍需和硬資料交叉驗證。", f"AI suggested {_side_label(case.ai_snapshot.suggested_side, False)}, but it still needed validation against hard data."))
     if case.technical_snapshot:
         signals.append(_text(zh, f"技術面重點：{case.technical_snapshot[0].label} {case.technical_snapshot[0].value}。", f"Technical focus: {case.technical_snapshot[0].label} {case.technical_snapshot[0].value}."))
-    if case.chip_snapshot:
-        signals.append(_text(zh, f"籌碼 proxy 重點：{case.chip_snapshot[0].label} {case.chip_snapshot[0].value}。", f"Chip proxy focus: {case.chip_snapshot[0].label} {case.chip_snapshot[0].value}."))
+    if case.news_snapshot:
+        signals.append(_text(zh, f"新聞/題材重點：{case.news_snapshot[0].label} {case.news_snapshot[0].value}。", f"News/theme focus: {case.news_snapshot[0].label} {case.news_snapshot[0].value}."))
     return signals
 
 
 def _next_drill_focus(tags: list[str], zh: bool) -> str:
     if "AI reliance" in tags:
-        return _text(zh, "下一題刻意降低 AI 權重，先獨立寫出技術與籌碼判斷。", "Next drill: lower AI weight and write technical plus chip judgments first.")
+        return _text(zh, "下一題刻意降低 AI 權重，先獨立寫出技術與新聞/題材判斷。", "Next drill: lower AI weight and write technical plus news/theme judgments first.")
     if "calibration" in tags:
         return _text(zh, "下一題專注練習信心校準，高信心只給證據密度高的題目。", "Next drill: confidence calibration; reserve high confidence for dense evidence.")
     if "counterargument" in tags:
         return _text(zh, "下一題先寫反方最佳論點，再提交答案。", "Next drill: write the best opposing case before submitting.")
-    return _text(zh, "下一題練習四面向權重分配，避免單一訊號支配判斷。", "Next drill: practice four-dimension weighting so one signal does not dominate.")
+    return _text(zh, "下一題練習三面向權重分配，並補一條新聞/題材反證。", "Next drill: practice three-dimension weighting and add one news/theme counterpoint.")
 
 
 def _ai_bull_thesis(ticker: str, point: MarketIndicatorPoint, pct20: float, volume_ratio: float) -> str:

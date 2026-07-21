@@ -81,6 +81,7 @@ def test_practice_attempt_persists_weights_feedback_and_future_results(monkeypat
     assert body["future_results"]
     assert body["feedback"]["probable_causes"]
     assert body["feedback"]["suggested_framework"]
+    assert "MACD" in body["feedback"]["diagnosis"] or "MACD" in " ".join(body["feedback"]["good_reasoning"])
     assert body["ai_side"] in {"bull", "bear", "neutral"}
 
     with sqlite3.connect(database_file) as connection:
@@ -208,7 +209,8 @@ def test_random_market_question_contains_historical_factor_snapshots(monkeypatch
             }
         )
     monkeypatch.setattr(practice, "_history_rows_for_ticker", lambda _ticker: rows)
-    monkeypatch.setattr(practice, "_fundamental_snapshot", lambda _ticker: [practice.SnapshotMetric(label="Revenue", value="+10%")])
+    monkeypatch.setattr(practice, "_fundamental_snapshot", lambda _ticker, as_of=None: [practice.SnapshotMetric(label="Revenue", value="+10%")])
+    monkeypatch.setattr(practice, "_news_snapshot", lambda _ticker, as_of=None: [practice.SnapshotMetric(label="As-of news", value="AI demand theme")])
     monkeypatch.setattr(practice.random, "choice", lambda _items: "NVDA")
     monkeypatch.setattr(practice.random, "randint", lambda start, _end: start)
 
@@ -221,6 +223,7 @@ def test_random_market_question_contains_historical_factor_snapshots(monkeypatch
     assert len(question.future_results) == 3
     assert question.technical_snapshot
     assert question.fundamental_snapshot
+    assert question.news_snapshot
     assert question.chip_snapshot
     assert question.ai_snapshot is not None
     last_point = question.market_window[-1]
@@ -228,7 +231,44 @@ def test_random_market_question_contains_historical_factor_snapshots(monkeypatch
     assert last_point.d is not None
     assert last_point.macd is not None
     assert last_point.rsi is not None
+    assert last_point.ma10 is not None
     assert last_point.bb_upper is not None
     assert last_point.bb_middle is not None
     assert last_point.bb_lower is not None
     assert any(metric.label == "Bollinger" for metric in question.technical_snapshot)
+
+
+def test_news_snapshot_filters_future_headlines(monkeypatch) -> None:
+    class FakeTicker:
+        info = {"sector": "Technology", "industry": "Software"}
+        news = [
+            {"title": "future headline", "publisher": "Future Wire", "providerPublishTime": 1706745600},
+            {"title": "past headline", "publisher": "Past Wire", "providerPublishTime": 1704412800},
+        ]
+
+    monkeypatch.setattr(practice.yf, "Ticker", lambda _ticker: FakeTicker())
+
+    metrics = practice._news_snapshot("SMALL", as_of="2024-01-10")
+    text = " ".join(f"{metric.label} {metric.value} {metric.detail}" for metric in metrics)
+
+    assert "past headline" in text
+    assert "Future Wire" not in text
+    assert "future headline" not in text
+
+
+def test_fundamental_snapshot_hides_latest_ratios_without_asof_backfill(monkeypatch) -> None:
+    class EmptyFinancials:
+        empty = True
+
+    class FakeTicker:
+        info = {"marketCap": 999_000_000_000, "trailingPE": 88}
+        quarterly_financials = EmptyFinancials()
+
+    monkeypatch.setattr(practice.yf, "Ticker", lambda _ticker: FakeTicker())
+
+    metrics = practice._fundamental_snapshot("SMALL", as_of="2024-01-10")
+    text = " ".join(f"{metric.label} {metric.value} {metric.detail}" for metric in metrics)
+
+    assert "Historical financials" in text
+    assert "999.00B" not in text
+    assert "88" not in text

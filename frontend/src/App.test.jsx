@@ -37,7 +37,7 @@ const practiceQuestion = {
   currency: "USD",
   horizon_days: 7,
   scenario: "You are back on 2026-06-02. Only information available through this date is visible.",
-  training_goal: "Practice integrating technical, fundamental, chip-proxy, and AI analysis without future leakage.",
+  training_goal: "Practice integrating technical, fundamental, news/theme, and AI analysis without future leakage.",
   bull_points: ["20D return is positive.", "AI suggests bull, but needs validation."],
   bear_points: ["Volume can warn of reversal.", "Narrative-only AI should be discounted."],
   prompt: "What is your 7D directional judgment from this historical snapshot?",
@@ -57,6 +57,7 @@ const practiceQuestion = {
       volume_ma5: 950000,
       volume_ma20: 900000,
       ma5: 120,
+      ma10: 119,
       ma20: 118,
       bb_middle: 118,
       bb_upper: 124,
@@ -79,6 +80,7 @@ const practiceQuestion = {
       volume_ma5: 1000000,
       volume_ma20: 1000000,
       ma5: 121,
+      ma10: 120,
       ma20: 119,
       bb_middle: 119,
       bb_upper: 125,
@@ -99,8 +101,12 @@ const practiceQuestion = {
   fundamental_snapshot: [
     { label: "Revenue growth", value: "+10.0%", detail: "Latest proxy.", tone: "bull" },
   ],
+  news_snapshot: [
+    { label: "Business lane", value: "Semiconductors / AI infrastructure", detail: "Latest profile.", tone: "neutral" },
+    { label: "As-of news", value: "AI demand remains a key theme", detail: "Demo News", tone: "neutral" },
+  ],
   chip_snapshot: [
-    { label: "Volume / 20D avg", value: "1.20x", detail: "Chip proxy.", tone: "neutral" },
+    { label: "Volume / 20D avg", value: "1.20x", detail: "Price-volume read.", tone: "neutral" },
   ],
   ai_snapshot: {
     suggested_side: "bull",
@@ -373,7 +379,7 @@ describe("App", () => {
                   missed_signals: ["Technical focus: MA5 / MA20 121.00 / 119.00."],
                   good_reasoning: ["You included a counter-risk."],
                   next_drill_focus: "Write the best opposing case before submitting.",
-                  suggested_framework: "Judge technical trend first, then validate with chip proxy and AI.",
+                  suggested_framework: "Judge technical trend first, then validate with news themes and AI.",
                 },
               }),
             ),
@@ -571,10 +577,19 @@ describe("App", () => {
     expect(screen.getByText(/Training goal/)).toBeInTheDocument();
     expect(screen.getAllByText("Technical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Fundamental").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Price-volume proxy").length).toBeGreaterThan(0);
+    expect(screen.queryByText("Price-volume proxy")).not.toBeInTheDocument();
     expect(screen.getByText(/AI suggested side/)).toBeInTheDocument();
-    expect(screen.getByText("K-line / MA / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
+    expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(screen.getAllByText("Bollinger Bands").length).toBeGreaterThan(0);
+    expect(screen.getByText("News/Theme")).toBeInTheDocument();
+    expect(screen.getByText("AI demand remains a key theme")).toBeInTheDocument();
+    expect(screen.queryByText("Close 123.45; 5D +2.00%, 20D +5.00%.")).not.toBeInTheDocument();
+    expect(screen.getByText("Open")).toBeInTheDocument();
+    expect(screen.getAllByText("MA10").length).toBeGreaterThan(0);
+    const ma10Checkbox = screen.getByLabelText("MA10");
+    expect(ma10Checkbox).toBeChecked();
+    fireEvent.click(ma10Checkbox);
+    expect(ma10Checkbox).not.toBeChecked();
     expect(screen.getByText("Answer after reading")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Bearish" }));
@@ -656,7 +671,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Practice" }));
 
     expect(await screen.findByText("Historical Backtest Drills")).toBeInTheDocument();
-    expect(screen.getByText("K-line / MA / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
+    expect(screen.getByText("K-line / MA5 / MA10 / MA20 / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("http://127.0.0.1:8030/api/practice?"),
       {},
