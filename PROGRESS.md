@@ -631,3 +631,57 @@
 - 可再加入「錯題重刷 / spaced repetition」，讓常見弱點自動決定下一題類型。
 - 若之後 OpenAI API quota 正常，可新增可選的 LLM AI snapshot，並保留 deterministic fallback。
 - README 中文段落仍建議後續完整重寫，避免目前舊段落亂碼影響評審閱讀。
+## 2026-07-21 Practice failed to fetch 修復與比賽影片準備
+
+### 做了什麼
+- 追查 `http://127.0.0.1:5184/` 的 Practice failed to fetch，確認問題是兩層疊加：前端目前以 `VITE_API_BASE_URL=http://127.0.0.1:8020` 直連後端，而 `/api/practice` 在 `8020` 因舊 SQLite 資料回 500；同時 Vite proxy 自身的 `/api/practice` 仍回 404。
+- 修正前端 Practice API 呼叫：即使已設定 `VITE_API_BASE_URL`，Practice dashboard 與 attempt submit 遇到 404/500/502/503/504 或非 JSON dev proxy 回應時，會依序嘗試本機 fallback backend URL，避免 demo 時被殘留 port 卡住。
+- 修正後端 Practice dashboard：隨機題生成若因 yfinance/live data 失敗，會退回本地 deterministic DEMO 題；cache 寫入失敗不會讓整頁 500。
+- 修正 legacy SQLite 相容：舊 `practice_attempts` 內的 `nvda-ai-guidance` 等已不存在題號不再讓 `_recent_attempts()` 爆掉，會降級顯示為 legacy ticker 紀錄並保留回饋。
+- 修正舊 cached question 的技術指標欄位缺值問題：MA/RSI/KD/MACD 為 `None` 時摘要顯示 `N/A`，不再因格式化 `None` 導致 500。
+
+### 關鍵決定
+- 不刪除使用者既有 `data/app.db` 內容，改用 backward-compatible reader 保留 demo 操作紀錄。
+- Practice 訓練模式以「可用性優先」處理：live random 題可以失敗，但刷題頁不能白屏，必須回 demo-safe 題。
+- 前端 fallback 只針對 Practice API，避免大範圍改動所有 API 呼叫造成額外回歸風險。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：29 passed，1 warning。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests\test_practice.py -q`：8 passed，1 warning。
+- `npm.cmd test -- --run`：10 passed。
+- `npm.cmd run build`：通過。
+- 實機驗證：in-app browser 進入 `http://127.0.0.1:5184/` 的 Practice 頁，未再出現 failed to fetch，畫面顯示 Historical Backtest Drills、K-line / Price-Volume / KD / MACD、統計與 AI 面向。
+
+### 遇到的問題
+- PowerShell 直接執行 `npm` 會被 execution policy 擋住，改用 `npm.cmd`。
+- Windows sandbox 讓 `Get-NetTCPConnection`/`tasklist` 部分查詢權限受限，改用 `netstat` 與 API 實測。
+- 背景啟動額外 uvicorn port 時 Windows `Path/PATH` 環境變數衝突，最後確認現有 `8020` reload 後已可用，不再強行切換 port。
+
+### 下一步
+- 製作上完字幕的比賽展示影片，主軸改成「歷史資料實測刷題 + AI 面向訓練 + 多空辯論 + 戰績回測」。
+
+## 2026-07-21 Practice 修復驗收與上字幕比賽影片完成
+
+### 做了什麼
+- 產出已上字幕、含中文語音旁白的比賽影片：`submission_assets/generated/competition_video/bull_vs_bear_arena_competition_captioned.mp4`。
+- 新增影片產生腳本 `scripts/render_competition_video.ps1`，可用本機 FFmpeg 與 Windows SAPI 重新生成投稿影片。
+- 新增 `submission_assets/competition_video_script_zh_tw.md` 作為中文配音逐字稿，並新增 `submission_assets/competition_video_subtitles_zh_tw.srt` 作為字幕檔。
+- 補上 `.gitignore` 規則，排除 `backend/data/*.db` 與 `backend/data/*.sqlite`，避免測試或本機 demo SQLite 檔被誤 commit。
+
+### 關鍵決定
+- 影片主軸聚焦在歷史資料實測刷題，而不是只展示 AI 辯論，符合目前產品定位：訓練使用者基於過去可見資訊、技術面、基本面、籌碼 proxy 與 AI 面向做判斷。
+- 最終 MP4 放在 `submission_assets/generated/`，維持不進 Git；Git 只保存可重製影片的腳本、逐字稿與字幕檔。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest -q`（backend）：31 passed，1 warning。
+- `npm.cmd test -- --run`（frontend）：10 passed。
+- `npm.cmd run build`（frontend）：通過。
+- 實機驗證：`http://127.0.0.1:5184/` 的 Practice 頁不再顯示 failed to fetch。
+- 使用 FFmpeg 驗證影片：長度約 00:02:10、1920x1080、30 fps、H.264/AAC MP4；並抽查 25 秒預覽圖確認字幕已燒錄。
+
+### 遇到的問題
+- HyperFrames CLI 在本機不可用，因此改用可重現的 PowerShell/GDI+、Windows SAPI TTS 與 FFmpeg 流程產出比賽影片。
+- Windows PowerShell 5 解析中文腳本需要 UTF-8 BOM，因此影片腳本已保存為 UTF-8 with BOM。
+
+### 下一步
+- 上傳 MP4 到 YouTube 或 Devpost 可接受的影片平台後，將影片 URL 填入投稿表單。

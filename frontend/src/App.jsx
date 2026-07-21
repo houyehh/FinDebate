@@ -10,9 +10,20 @@ const healthLabels = {
 
 const examples = ["NVDA", "2330.TW", "BTC-USD"];
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "";
+const DEV_API_BASE_URLS = ["http://127.0.0.1:8030", "http://127.0.0.1:8020", "http://127.0.0.1:8000"];
 
 function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
+}
+
+function practiceApiUrls(path) {
+  const fallbackUrls = DEV_API_BASE_URLS.map((baseUrl) => `${baseUrl}${path}`);
+  if (API_BASE_URL) {
+    const configuredUrl = apiUrl(path);
+    return [configuredUrl, ...fallbackUrls.filter((url) => url !== configuredUrl)];
+  }
+
+  return [path, ...fallbackUrls];
 }
 
 function formatPrice(price, currency, language = "zh-Hant") {
@@ -42,6 +53,44 @@ async function readApiResponse(response, fallbackMessage) {
   } catch {
     throw new Error(fallbackMessage);
   }
+}
+
+async function fetchPracticeApi(path, options = {}, fallbackMessage) {
+  const urls = practiceApiUrls(path);
+  let lastError = null;
+
+  for (let index = 0; index < urls.length; index += 1) {
+    const url = urls[index];
+    let response;
+
+    try {
+      response = await fetch(url, options);
+    } catch (error) {
+      lastError = error;
+      continue;
+    }
+
+    let data;
+    try {
+      data = await readApiResponse(response, fallbackMessage);
+    } catch (error) {
+      lastError = error;
+      if (index < urls.length - 1) {
+        continue;
+      }
+      throw error;
+    }
+
+    const retryableStatus = [404, 500, 502, 503, 504].includes(response.status);
+    if (!response.ok && retryableStatus && index < urls.length - 1) {
+      lastError = new Error(apiErrorMessage(data, fallbackMessage));
+      continue;
+    }
+
+    return { response, data };
+  }
+
+  throw new Error(lastError?.message || fallbackMessage);
 }
 
 function apiErrorMessage(payload, fallbackMessage) {
@@ -309,12 +358,11 @@ function App() {
     setPracticeError("");
 
     try {
-      const response = await fetch(
-        apiUrl(
-          `/api/practice?language=${encodeURIComponent(language)}&refresh_random=${refreshRandom}`,
-        ),
+      const { response, data } = await fetchPracticeApi(
+        `/api/practice?language=${encodeURIComponent(language)}&refresh_random=${refreshRandom}`,
+        {},
+        t.practiceFailed,
       );
-      const data = await readApiResponse(response, t.practiceFailed);
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.practiceFailed));
@@ -329,12 +377,15 @@ function App() {
   }
 
   async function handleSubmitPracticeAttempt(payload) {
-    const response = await fetch(apiUrl("/api/practice/attempts"), {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await readApiResponse(response, t.practiceSubmitFailed);
+    const { response, data } = await fetchPracticeApi(
+      "/api/practice/attempts",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      },
+      t.practiceSubmitFailed,
+    );
 
     if (!response.ok) {
       throw new Error(apiErrorMessage(data, t.practiceSubmitFailed));

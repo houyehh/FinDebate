@@ -592,6 +592,68 @@ describe("App", () => {
     });
   });
 
+  it("falls back to a direct backend when the practice dev proxy misses", async () => {
+    global.fetch.mockImplementation((url) => {
+      if (url === "/api/health") {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ status: "ok" }) });
+      }
+
+      if (url.startsWith("/api/practice?")) {
+        return Promise.resolve({
+          ok: false,
+          status: 404,
+          text: () => Promise.resolve(JSON.stringify({ detail: "Not Found" })),
+        });
+      }
+
+      if (url.startsWith("http://127.0.0.1:8030/api/practice?")) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                stats: {
+                  total_attempts: 0,
+                  accuracy_rate: null,
+                  high_confidence_accuracy_rate: null,
+                  low_confidence_accuracy_rate: null,
+                  most_common_focus: null,
+                  ai_alignment_rate: null,
+                  ai_aligned_accuracy_rate: null,
+                  ai_unaligned_accuracy_rate: null,
+                  high_technical_weight_accuracy_rate: null,
+                  high_fundamental_weight_accuracy_rate: null,
+                  high_chip_weight_accuracy_rate: null,
+                  high_ai_weight_accuracy_rate: null,
+                  top_weaknesses: [],
+                },
+                questions: [practiceQuestion],
+                recent_attempts: [],
+              }),
+            ),
+        });
+      }
+
+      return Promise.resolve({
+        ok: false,
+        status: 404,
+        text: () => Promise.resolve(JSON.stringify({ detail: { message: "Missing endpoint." } })),
+      });
+    });
+
+    render(<App />);
+    fireEvent.click(screen.getByRole("button", { name: "EN" }));
+    fireEvent.click(screen.getByRole("button", { name: "Practice" }));
+
+    expect(await screen.findByText("Historical Backtest Drills")).toBeInTheDocument();
+    expect(screen.getByText("K-line / Price-Volume / KD / MACD")).toBeInTheDocument();
+    expect(global.fetch).toHaveBeenCalledWith(
+      expect.stringContaining("http://127.0.0.1:8030/api/practice?"),
+      {},
+    );
+  });
+
   it("saves OpenAI API key and can switch to demo mode", async () => {
     render(<App />);
 

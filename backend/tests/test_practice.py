@@ -36,6 +36,25 @@ def test_practice_dashboard_hides_answers_and_shows_dimensions(monkeypatch) -> N
     assert first_question["training_goal"]
 
 
+def test_practice_dashboard_falls_back_when_random_generation_fails(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_PATH", str(_database_file()))
+
+    def fail_generation(_language: str) -> practice.PracticeCase:
+        raise RuntimeError("live data unavailable")
+
+    monkeypatch.setattr(practice, "generate_random_market_case", fail_generation)
+    client = TestClient(app)
+
+    response = client.get("/api/practice?refresh_random=true")
+
+    assert response.status_code == 200
+    body = response.json()
+    first_question = body["questions"][0]
+    assert first_question["ticker"] == "DEMO"
+    assert first_question["market_window"]
+    assert first_question["ai_snapshot"] is not None
+
+
 def test_practice_attempt_persists_weights_feedback_and_future_results(monkeypatch) -> None:
     database_file = _database_file()
     monkeypatch.setenv("DATABASE_PATH", str(database_file))
@@ -77,6 +96,62 @@ def test_practice_attempt_persists_weights_feedback_and_future_results(monkeypat
     dashboard = client.get("/api/practice").json()
     assert dashboard["stats"]["total_attempts"] == 1
     assert dashboard["recent_attempts"][0]["question_id"] == "aapl-historical-quality-snapshot"
+
+
+def test_practice_dashboard_handles_legacy_attempt_without_question_case(monkeypatch) -> None:
+    database_file = _database_file()
+    monkeypatch.setenv("DATABASE_PATH", str(database_file))
+    monkeypatch.setenv("PRACTICE_DISABLE_RANDOM", "1")
+    practice.init_db()
+    with practice.connect() as connection:
+        connection.execute(
+            """
+            INSERT INTO practice_attempts (
+                question_id, selected_side, confidence, rationale, answer_side,
+                outcome_pct, result, feedback_json, created_at,
+                weights_json, ai_side, ai_agreement
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "nvda-ai-guidance",
+                "bull",
+                3,
+                "Old demo attempt.",
+                "bull",
+                8.4,
+                "correct",
+                '{"summary":"Legacy feedback","probable_causes":[],"improvement_steps":[],"focus_tags":["legacy"]}',
+                "2026-07-20T00:00:00+00:00",
+                "{}",
+                None,
+                None,
+            ),
+        )
+    client = TestClient(app)
+
+    response = client.get("/api/practice?refresh_random=false")
+
+    assert response.status_code == 200
+    recent = response.json()["recent_attempts"][0]
+    assert recent["question_id"] == "nvda-ai-guidance"
+    assert recent["ticker"] == "NVDA"
+    assert recent["future_results"] == []
+
+
+def test_indicator_summary_handles_legacy_points_without_indicators() -> None:
+    point = practice.MarketIndicatorPoint(
+        date="2026-01-02",
+        open=100,
+        high=102,
+        low=99,
+        close=101,
+        volume=1_000_000,
+    )
+
+    summary = practice._indicator_summary(point, [point], False)
+
+    assert "N/A" in summary[2]
+    assert "N/A" in summary[3]
 
 
 def test_practice_attempt_rejects_weights_that_do_not_sum_to_100(monkeypatch) -> None:

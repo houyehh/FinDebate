@@ -189,8 +189,14 @@ def get_practice_dashboard(language: str = "zh-Hant", refresh_random: bool = Tru
     questions = [_public_question(case, language) for case in PRACTICE_BANK]
 
     if refresh_random and os.getenv("PRACTICE_DISABLE_RANDOM") != "1":
-        random_case = generate_random_market_case(language)
-        _cache_practice_case(random_case)
+        try:
+            random_case = generate_random_market_case(language)
+        except Exception:
+            random_case = _fallback_random_market_case(language)
+        try:
+            _cache_practice_case(random_case)
+        except Exception:
+            pass
         questions.insert(0, _public_question(random_case, language))
     else:
         cached_case = _latest_cached_case()
@@ -224,6 +230,21 @@ def generate_random_market_case(language: str = "zh-Hant") -> PracticeCase:
     selected_index = random.randint(60, max_index)
     horizon = PRACTICE_HORIZONS[random.randint(0, len(PRACTICE_HORIZONS) - 1)]
     return _case_from_points(ticker, points, selected_index, horizon, source_note, language)
+
+
+def _fallback_random_market_case(language: str = "zh-Hant") -> PracticeCase:
+    points = _indicator_points(_fallback_history_rows())
+    max_index = len(points) - 31
+    selected_index = min(max(60, max_index // 2), max_index)
+    return _case_from_points(
+        "DEMO",
+        points,
+        selected_index,
+        7,
+        "Local deterministic fallback OHLCV through the as-of date.",
+        language,
+        use_live_fundamentals=False,
+    )
 
 
 def submit_practice_attempt(request: PracticeAttemptRequest) -> PracticeAttemptRecord:
@@ -707,18 +728,24 @@ def _indicator_summary(point: MarketIndicatorPoint, window: list[MarketIndicator
     pct5 = _window_pct(window, 5)
     pct20 = _window_pct(window, 20)
     volume_ratio = point.volume / point.volume_ma20 if point.volume_ma20 else 1
+    ma5 = _optional_number(point.ma5)
+    ma20 = _optional_number(point.ma20)
+    rsi = _optional_number(point.rsi, 1)
+    k_value = _optional_number(point.k, 1)
+    d_value = _optional_number(point.d, 1)
+    macd_hist = _optional_number(point.macd_hist, 3, signed=True)
     if zh:
         return [
             f"收盤 {point.close:.2f}，5 日 {pct5:+.2f}%，20 日 {pct20:+.2f}%。",
             f"量能為 20 日均量 {volume_ratio:.2f} 倍。",
-            f"MA5/MA20：{point.ma5:.2f} / {point.ma20:.2f}，RSI14：{point.rsi:.1f}。",
-            f"KD：K={point.k:.1f} / D={point.d:.1f}；MACD Hist={point.macd_hist:+.3f}。",
+            f"MA5/MA20：{ma5} / {ma20}，RSI14：{rsi}。",
+            f"KD：K={k_value} / D={d_value}；MACD Hist={macd_hist}。",
         ]
     return [
         f"Close {point.close:.2f}; 5D {pct5:+.2f}%, 20D {pct20:+.2f}%.",
         f"Volume is {volume_ratio:.2f}x the 20D average.",
-        f"MA5/MA20: {point.ma5:.2f} / {point.ma20:.2f}; RSI14: {point.rsi:.1f}.",
-        f"KD: K={point.k:.1f} / D={point.d:.1f}; MACD Hist={point.macd_hist:+.3f}.",
+        f"MA5/MA20: {ma5} / {ma20}; RSI14: {rsi}.",
+        f"KD: K={k_value} / D={d_value}; MACD Hist={macd_hist}.",
     ]
 
 
@@ -910,13 +937,19 @@ def _practice_stats() -> PracticeStats:
 
 
 def _attempt_from_row(row) -> PracticeAttemptRecord:
-    case = _case_by_id(row["question_id"])
+    try:
+        case = _case_by_id(row["question_id"])
+        ticker = case.ticker
+        future_results = case.future_results
+    except PracticeQuestionNotFoundError:
+        ticker = _legacy_ticker_from_question_id(row["question_id"])
+        future_results = []
     weights = _weights_from_json(row["weights_json"])
     ai_agreement = None if row["ai_agreement"] is None else bool(row["ai_agreement"])
     return PracticeAttemptRecord(
         id=row["id"],
         question_id=row["question_id"],
-        ticker=case.ticker,
+        ticker=ticker,
         selected_side=row["selected_side"],
         confidence=row["confidence"],
         rationale=row["rationale"],
@@ -924,10 +957,10 @@ def _attempt_from_row(row) -> PracticeAttemptRecord:
         answer_side=row["answer_side"],
         outcome_pct=row["outcome_pct"],
         result=row["result"],
-        feedback=PracticeFeedback.model_validate_json(row["feedback_json"]),
+        feedback=_feedback_from_json(row["feedback_json"]),
         ai_side=row["ai_side"],
         ai_agreement=ai_agreement,
-        future_results=case.future_results,
+        future_results=future_results,
         created_at=row["created_at"],
     )
 
@@ -1080,6 +1113,13 @@ def _to_float(value: Any) -> float | None:
     return number
 
 
+def _optional_number(value: float | None, digits: int = 2, signed: bool = False) -> str:
+    if value is None:
+        return "N/A"
+    sign = "+" if signed else ""
+    return f"{value:{sign}.{digits}f}"
+
+
 def _weight_total(weights: JudgmentWeights) -> int:
     return weights.technical + weights.fundamental + weights.chip + weights.ai
 
@@ -1091,6 +1131,25 @@ def _weights_from_json(raw: str | None) -> JudgmentWeights:
         return JudgmentWeights.model_validate_json(raw)
     except Exception:
         return JudgmentWeights()
+
+
+def _feedback_from_json(raw: str | None) -> PracticeFeedback:
+    if raw:
+        try:
+            return PracticeFeedback.model_validate_json(raw)
+        except Exception:
+            pass
+    return PracticeFeedback(
+        summary="Legacy practice attempt loaded without full coach feedback.",
+        probable_causes=["This attempt was created before the current practice schema."],
+        improvement_steps=["Replay a new historical drill to receive full dimension-based feedback."],
+        focus_tags=["legacy"],
+    )
+
+
+def _legacy_ticker_from_question_id(question_id: str) -> str:
+    match = re.match(r"([A-Za-z0-9.]+)", question_id or "")
+    return match.group(1).upper() if match else "LEGACY"
 
 
 def _accuracy(rows) -> float | None:
