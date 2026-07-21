@@ -16,7 +16,7 @@ function apiUrl(path) {
   return `${API_BASE_URL}${path}`;
 }
 
-function practiceApiUrls(path) {
+function fallbackApiUrls(path) {
   const fallbackUrls = DEV_API_BASE_URLS.map((baseUrl) => `${baseUrl}${path}`);
   if (API_BASE_URL) {
     const configuredUrl = apiUrl(path);
@@ -55,8 +55,8 @@ async function readApiResponse(response, fallbackMessage) {
   }
 }
 
-async function fetchPracticeApi(path, options = {}, fallbackMessage) {
-  const urls = practiceApiUrls(path);
+async function fetchApiWithFallback(path, options = {}, fallbackMessage) {
+  const urls = fallbackApiUrls(path);
   let lastError = null;
 
   for (let index = 0; index < urls.length; index += 1) {
@@ -75,7 +75,7 @@ async function fetchPracticeApi(path, options = {}, fallbackMessage) {
       data = await readApiResponse(response, fallbackMessage);
     } catch (error) {
       lastError = error;
-      if (index < urls.length - 1) {
+      if (response.ok && index < urls.length - 1) {
         continue;
       }
       throw error;
@@ -91,6 +91,10 @@ async function fetchPracticeApi(path, options = {}, fallbackMessage) {
   }
 
   throw new Error(lastError?.message || fallbackMessage);
+}
+
+async function fetchPracticeApi(path, options = {}, fallbackMessage) {
+  return fetchApiWithFallback(path, options, fallbackMessage);
 }
 
 function apiErrorMessage(payload, fallbackMessage) {
@@ -162,6 +166,15 @@ function App() {
   const [snapshot, setSnapshot] = useState(null);
   const [lookupState, setLookupState] = useState("idle");
   const [error, setError] = useState("");
+  const [liveAnalysis, setLiveAnalysis] = useState(null);
+  const [liveState, setLiveState] = useState("idle");
+  const [liveError, setLiveError] = useState("");
+  const [liveSide, setLiveSide] = useState("bull");
+  const [liveConfidence, setLiveConfidence] = useState(3);
+  const [liveRationale, setLiveRationale] = useState("");
+  const [liveDecisionState, setLiveDecisionState] = useState("idle");
+  const [liveDecisionError, setLiveDecisionError] = useState("");
+  const [liveDecisionSaved, setLiveDecisionSaved] = useState(null);
   const [debate, setDebate] = useState(null);
   const [debateState, setDebateState] = useState("idle");
   const [debateError, setDebateError] = useState("");
@@ -175,6 +188,9 @@ function App() {
   const [recordsState, setRecordsState] = useState("idle");
   const [recordsData, setRecordsData] = useState(null);
   const [recordsError, setRecordsError] = useState("");
+  const [portfolioState, setPortfolioState] = useState("idle");
+  const [portfolioData, setPortfolioData] = useState(null);
+  const [portfolioError, setPortfolioError] = useState("");
   const [practiceState, setPracticeState] = useState("idle");
   const [practiceData, setPracticeData] = useState(null);
   const [practiceError, setPracticeError] = useState("");
@@ -217,6 +233,9 @@ function App() {
   useEffect(() => {
     if (activePage === "records") {
       fetchRecords();
+      fetchPractice({ silent: true, refreshRandom: false });
+    } else if (activePage === "portfolio") {
+      fetchPortfolio();
     } else if (activePage === "practice") {
       fetchPractice();
     } else if (activePage === "settings") {
@@ -243,6 +262,12 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [ticker, activePage]);
 
+  useEffect(() => {
+    if (activePage === "home" && snapshot?.ticker && liveAnalysis) {
+      fetchLiveAnalysis(snapshot.ticker);
+    }
+  }, [language, activePage]);
+
   async function handleSubmit(event) {
     event.preventDefault();
     await lookupTicker(ticker);
@@ -259,24 +284,36 @@ function App() {
     setError("");
 
     try {
-      const response = await fetch(apiUrl(`/api/tickers/${encodeURIComponent(normalizedTicker)}`));
-      const data = await readApiResponse(response, t.tickerNotFound);
+      const { response, data } = await fetchApiWithFallback(
+        `/api/tickers/${encodeURIComponent(normalizedTicker)}`,
+        {},
+        t.tickerNotFound,
+      );
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.tickerNotFound));
       }
 
       setSnapshot(data);
+      setLiveAnalysis(null);
+      setLiveError("");
+      setLiveState("idle");
       setDebate(null);
       setDebateError("");
       setDebateState("idle");
       resetVerdictState();
+      resetLiveDecisionState();
       setLookupState("ready");
       setShowTickerSuggestions(false);
+      await fetchLiveAnalysis(data.ticker);
     } catch (lookupError) {
       setSnapshot(null);
+      setLiveAnalysis(null);
+      setLiveError("");
+      setLiveState("idle");
       setDebate(null);
       resetVerdictState();
+      resetLiveDecisionState();
       setError(lookupError.message);
       setLookupState("error");
     }
@@ -285,10 +322,11 @@ function App() {
   async function fetchTickerSuggestions(query) {
     setTickerSuggestionState("loading");
     try {
-      const response = await fetch(
-        apiUrl(`/api/tickers/search?q=${encodeURIComponent(query)}&limit=8`),
+      const { response, data } = await fetchApiWithFallback(
+        `/api/tickers/search?q=${encodeURIComponent(query)}&limit=8`,
+        {},
+        t.tickerNotFound,
       );
-      const data = await readApiResponse(response, t.tickerNotFound);
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.tickerNotFound));
       }
@@ -311,8 +349,7 @@ function App() {
     setRecordsError("");
 
     try {
-      const response = await fetch(apiUrl("/api/records"));
-      const data = await readApiResponse(response, t.recordsFailed);
+      const { response, data } = await fetchApiWithFallback("/api/records", {}, t.recordsFailed);
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.recordsFailed));
@@ -326,14 +363,70 @@ function App() {
     }
   }
 
+  async function fetchPortfolio() {
+    setPortfolioState("loading");
+    setPortfolioError("");
+
+    try {
+      const { response, data } = await fetchApiWithFallback(
+        "/api/portfolio",
+        {},
+        t.portfolioFailed,
+      );
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.portfolioFailed));
+      }
+
+      setPortfolioData(data);
+      setPortfolioState("ready");
+    } catch (portfolioLookupError) {
+      setPortfolioError(portfolioLookupError.message);
+      setPortfolioState("error");
+    }
+  }
+
+  async function fetchLiveAnalysis(rawTicker) {
+    const normalizedTicker = rawTicker.trim();
+    if (!normalizedTicker) {
+      return;
+    }
+
+    setLiveState("loading");
+    setLiveError("");
+    resetLiveDecisionState();
+
+    try {
+      const { response, data } = await fetchApiWithFallback(
+        `/api/live-analysis/${encodeURIComponent(normalizedTicker)}?language=${encodeURIComponent(language)}`,
+        {},
+        t.liveAnalysisFailed,
+      );
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.liveAnalysisFailed));
+      }
+
+      setLiveAnalysis(data);
+      setLiveState("ready");
+    } catch (liveLookupError) {
+      setLiveAnalysis(null);
+      setLiveError(liveLookupError.message);
+      setLiveState("error");
+    }
+  }
+
   async function fetchOpenAISettings() {
     setSettingsState("loading");
     setSettingsError("");
     setSettingsSaved(false);
 
     try {
-      const response = await fetch(apiUrl("/api/settings/openai"));
-      const data = await readApiResponse(response, t.settingsFailed);
+      const { response, data } = await fetchApiWithFallback(
+        "/api/settings/openai",
+        {},
+        t.settingsFailed,
+      );
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.settingsFailed));
@@ -404,12 +497,15 @@ function App() {
     setDebateError("");
 
     try {
-      const response = await fetch(apiUrl("/api/debates/judged"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker: snapshot.ticker, language }),
-      });
-      const data = await readApiResponse(response, t.debateFailed);
+      const { response, data } = await fetchApiWithFallback(
+        "/api/debates/judged",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ticker: snapshot.ticker, language }),
+        },
+        t.debateFailed,
+      );
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.debateFailed));
@@ -435,6 +531,56 @@ function App() {
     setVerdictResult(null);
   }
 
+  function resetLiveDecisionState() {
+    setLiveSide("bull");
+    setLiveConfidence(3);
+    setLiveRationale("");
+    setLiveDecisionState("idle");
+    setLiveDecisionError("");
+    setLiveDecisionSaved(null);
+  }
+
+  async function handleSubmitLiveDecision(event) {
+    event.preventDefault();
+    if (!liveAnalysis) {
+      return;
+    }
+
+    setLiveDecisionState("saving");
+    setLiveDecisionError("");
+
+    try {
+      const { response, data } = await fetchApiWithFallback(
+        "/api/portfolio/decisions",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ticker: liveAnalysis.ticker,
+            side: liveSide,
+            confidence: liveConfidence,
+            rationale: liveRationale,
+            language,
+            weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
+            analysis: liveAnalysis,
+          }),
+        },
+        t.liveDecisionFailed,
+      );
+
+      if (!response.ok) {
+        throw new Error(apiErrorMessage(data, t.liveDecisionFailed));
+      }
+
+      setLiveDecisionSaved(data);
+      setLiveDecisionState("saved");
+      await fetchPortfolio();
+    } catch (decisionError) {
+      setLiveDecisionError(decisionError.message);
+      setLiveDecisionState("error");
+    }
+  }
+
   async function handleSubmitVerdict(event) {
     event.preventDefault();
     if (!debate) {
@@ -444,17 +590,20 @@ function App() {
     setVerdictState("saving");
 
     try {
-      const response = await fetch(apiUrl("/api/verdicts"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          debate,
-          side: verdictSide,
-          confidence,
-          note,
-        }),
-      });
-      const data = await readApiResponse(response, t.verdictFailed);
+      const { response, data } = await fetchApiWithFallback(
+        "/api/verdicts",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            debate,
+            side: verdictSide,
+            confidence,
+            note,
+          }),
+        },
+        t.verdictFailed,
+      );
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.verdictFailed));
@@ -476,17 +625,20 @@ function App() {
     setSettingsSaved(false);
 
     try {
-      const response = await fetch(apiUrl("/api/settings/openai"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          api_key: settingsApiKey,
-          model: settingsModel,
-          key_source: settingsKeySource,
-          debate_mode: settingsDebateMode,
-        }),
-      });
-      const data = await readApiResponse(response, t.settingsSaveFailed);
+      const { response, data } = await fetchApiWithFallback(
+        "/api/settings/openai",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            api_key: settingsApiKey,
+            model: settingsModel,
+            key_source: settingsKeySource,
+            debate_mode: settingsDebateMode,
+          }),
+        },
+        t.settingsSaveFailed,
+      );
 
       if (!response.ok) {
         throw new Error(apiErrorMessage(data, t.settingsSaveFailed));
@@ -549,6 +701,17 @@ function App() {
                 }`}
               >
                 {t.navRecords}
+              </button>
+              <button
+                type="button"
+                onClick={() => setActivePage("portfolio")}
+                className={`rounded px-3 py-1 text-sm transition ${
+                  activePage === "portfolio"
+                    ? "bg-zinc-800 text-amber-200"
+                    : "text-zinc-400 hover:text-zinc-100"
+                }`}
+              >
+                {t.navPortfolio}
               </button>
             </div>
           </div>
@@ -721,14 +884,24 @@ function App() {
               <div className="mt-8">
                 <PriceLine history={snapshot.history} />
               </div>
-              <button
-                type="button"
-                onClick={handleStartDebate}
-                disabled={debateState === "loading"}
-                className="mt-7 h-12 rounded bg-amber-300 px-5 font-semibold text-zinc-950 transition hover:bg-amber-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
-              >
-                {debateState === "loading" ? t.researching : t.startDebate}
-              </button>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => fetchLiveAnalysis(snapshot.ticker)}
+                  disabled={liveState === "loading"}
+                  className="h-12 rounded bg-emerald-400 px-5 font-semibold text-zinc-950 transition hover:bg-emerald-300 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+                >
+                  {liveState === "loading" ? t.loadingLiveAnalysis : t.liveRunAnalysis}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleStartDebate}
+                  disabled={debateState === "loading"}
+                  className="h-12 rounded border border-amber-300 px-5 font-semibold text-amber-100 transition hover:bg-amber-950/30 disabled:cursor-not-allowed disabled:border-zinc-700 disabled:text-zinc-500"
+                >
+                  {debateState === "loading" ? t.researching : t.startDebate}
+                </button>
+              </div>
             </>
           ) : (
             <div className="flex h-full min-h-80 items-center justify-center rounded border border-dashed border-zinc-700 text-zinc-400">
@@ -737,6 +910,40 @@ function App() {
           )}
         </div>
       </section>
+
+      {liveState === "loading" ? (
+        <section className="mx-auto max-w-7xl px-8 pb-8">
+          <div className="rounded-lg border border-emerald-300/40 bg-emerald-950/20 p-5 text-emerald-100">
+            {t.loadingLiveAnalysis}
+          </div>
+        </section>
+      ) : null}
+
+      {liveError ? (
+        <section className="mx-auto max-w-7xl px-8 pb-8">
+          <div className="rounded-lg border border-red-400/40 bg-red-950/40 p-5 text-red-100">
+            {liveError}
+          </div>
+        </section>
+      ) : null}
+
+      {liveAnalysis ? (
+        <LiveAnalysisWorkbench
+          analysis={liveAnalysis}
+          side={liveSide}
+          setSide={setLiveSide}
+          confidence={liveConfidence}
+          setConfidence={setLiveConfidence}
+          rationale={liveRationale}
+          setRationale={setLiveRationale}
+          decisionState={liveDecisionState}
+          decisionError={liveDecisionError}
+          decisionSaved={liveDecisionSaved}
+          onSubmitDecision={handleSubmitLiveDecision}
+          language={language}
+          t={t}
+        />
+      ) : null}
 
       {debateState === "loading" ? (
         <section className="mx-auto max-w-6xl px-8 pb-12">
@@ -816,7 +1023,21 @@ function App() {
           state={recordsState}
           data={recordsData}
           error={recordsError}
-          onRefresh={fetchRecords}
+          practiceData={practiceData}
+          practiceState={practiceState}
+          onRefresh={() => {
+            fetchRecords();
+            fetchPractice({ silent: true, refreshRandom: false });
+          }}
+          t={t}
+        />
+      ) : activePage === "portfolio" ? (
+        <PortfolioPage
+          state={portfolioState}
+          data={portfolioData}
+          error={portfolioError}
+          onRefresh={fetchPortfolio}
+          language={language}
           t={t}
         />
       ) : activePage === "practice" ? (
@@ -1079,6 +1300,203 @@ function ScoreStrip({ score, t }) {
         <p className="mt-2 text-amber-200">unverifiable：{score.flag_reason}</p>
       ) : null}
     </div>
+  );
+}
+
+function LiveAnalysisWorkbench({
+  analysis,
+  side,
+  setSide,
+  confidence,
+  setConfidence,
+  rationale,
+  setRationale,
+  decisionState,
+  decisionError,
+  decisionSaved,
+  onSubmitDecision,
+  language,
+  t,
+}) {
+  const [evidenceTab, setEvidenceTab] = useState("fundamental");
+  const latestPoint = analysis.market_window?.[analysis.market_window.length - 1];
+
+  return (
+    <section className="mx-auto max-w-7xl px-8 pb-12">
+      <article className="border-y border-zinc-800 py-7">
+        <div className="grid grid-cols-[1fr_320px] gap-8">
+          <div>
+            <p className="text-sm uppercase text-emerald-200">{t.liveAnalysisKicker}</p>
+            <h1 className="mt-2 text-4xl font-semibold">{analysis.ticker}: {analysis.name}</h1>
+            <p className="mt-4 max-w-4xl text-sm leading-6 text-zinc-400">{t.liveAnalysisSubtitle}</p>
+            <p className="mt-4 text-xs leading-5 text-zinc-500">{analysis.source_summary}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs text-zinc-500">{t.liveLatestPrice}</p>
+              <p className="mt-1 text-xl font-semibold text-emerald-300">
+                {formatPrice(analysis.price, analysis.currency, language)}
+              </p>
+            </div>
+            <div className="border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs text-zinc-500">{t.liveAsOf}</p>
+              <p className="mt-1 font-semibold text-zinc-100">{analysis.as_of}</p>
+            </div>
+            <div className="col-span-2 border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs text-zinc-500">{t.liveDataSource}</p>
+              <p className="mt-1 text-xs leading-5 text-zinc-300">{analysis.data_note}</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <section className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900/40 p-6">
+        <div className="mb-5 flex items-start justify-between gap-6">
+          <div>
+            <p className="text-sm uppercase text-emerald-200">{t.decisionWorkbench}</p>
+            <h2 className="mt-2 text-2xl font-semibold">{t.technicalChartTitle}</h2>
+            <p className="mt-2 max-w-4xl text-sm leading-6 text-zinc-400">{t.liveWorkbenchLead}</p>
+          </div>
+          {latestPoint ? (
+            <div className="shrink-0 border border-zinc-800 bg-zinc-950 px-3 py-2 text-right text-xs text-zinc-400">
+              {t.practiceLatestVisibleClose}<br />
+              <span className="text-zinc-200">{latestPoint.close.toFixed(2)}</span>
+            </div>
+          ) : null}
+        </div>
+
+        {analysis.market_window?.length ? (
+          <MarketIndicatorChart points={analysis.market_window} t={t} />
+        ) : null}
+
+        <div className="mt-6">
+          <div className="mb-4 flex items-end justify-between gap-6">
+            <div>
+              <h2 className="text-2xl font-semibold">{t.practiceDimensionReview}</h2>
+              <p className="mt-2 max-w-4xl text-sm leading-6 text-zinc-400">{t.practiceDimensionLead}</p>
+            </div>
+          </div>
+          <EvidenceTabs
+            activeTab={evidenceTab}
+            setActiveTab={setEvidenceTab}
+            question={analysis}
+            t={t}
+          />
+        </div>
+
+        <div className="mt-6 grid grid-cols-2 gap-5">
+          <PracticeClueList title={t.practiceBullClues} tone="bull" items={analysis.bull_points || []} />
+          <PracticeClueList title={t.practiceBearClues} tone="bear" items={analysis.bear_points || []} />
+        </div>
+      </section>
+
+      <LiveDecisionPanel
+        side={side}
+        setSide={setSide}
+        confidence={confidence}
+        setConfidence={setConfidence}
+        rationale={rationale}
+        setRationale={setRationale}
+        decisionState={decisionState}
+        decisionError={decisionError}
+        decisionSaved={decisionSaved}
+        onSubmit={onSubmitDecision}
+        t={t}
+      />
+    </section>
+  );
+}
+
+function LiveDecisionPanel({
+  side,
+  setSide,
+  confidence,
+  setConfidence,
+  rationale,
+  setRationale,
+  decisionState,
+  decisionError,
+  decisionSaved,
+  onSubmit,
+  t,
+}) {
+  return (
+    <section className="mt-10 border-t border-zinc-800 pt-8">
+      <div className="grid grid-cols-[0.75fr_1.25fr] gap-8">
+        <div>
+          <p className="text-sm uppercase text-emerald-200">{t.liveDecisionKicker}</p>
+          <h2 className="mt-2 text-3xl font-semibold">{t.liveDecisionTitle}</h2>
+          <p className="mt-3 text-sm leading-6 text-zinc-400">{t.liveDecisionLead}</p>
+        </div>
+
+        <form className="border border-zinc-800 bg-zinc-900 p-6" onSubmit={onSubmit}>
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              ["bull", t.bullSide],
+              ["bear", t.bearSide],
+              ["neutral", t.neutralSide],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setSide(value)}
+                className={`rounded px-3 py-2 text-sm font-semibold transition ${
+                  side === value
+                    ? "bg-emerald-300 text-zinc-950"
+                    : "border border-zinc-700 text-zinc-300 hover:border-emerald-300 hover:text-emerald-200"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="live-confidence">
+            {t.confidence} {confidence}
+          </label>
+          <input
+            id="live-confidence"
+            type="range"
+            min="1"
+            max="5"
+            value={confidence}
+            onChange={(event) => setConfidence(Number(event.target.value))}
+            className="mt-3 w-full accent-emerald-300"
+          />
+
+          <label className="mt-6 block text-sm font-medium text-zinc-300" htmlFor="live-rationale">
+            {t.liveRationaleLabel}
+          </label>
+          <textarea
+            id="live-rationale"
+            value={rationale}
+            onChange={(event) => setRationale(event.target.value)}
+            placeholder={t.liveRationalePlaceholder}
+            className="mt-3 h-32 w-full resize-none rounded border border-zinc-700 bg-zinc-950 p-3 text-zinc-100 outline-none transition focus:border-emerald-300"
+          />
+
+          {decisionError ? (
+            <div className="mt-5 border border-red-400/40 bg-red-950/40 p-3 text-sm text-red-100">
+              {decisionError}
+            </div>
+          ) : null}
+
+          {decisionSaved ? (
+            <div className="mt-5 border border-emerald-400/40 bg-emerald-950/30 p-3 text-sm text-emerald-100">
+              {t.liveDecisionSaved}
+            </div>
+          ) : null}
+
+          <button
+            type="submit"
+            disabled={decisionState === "saving"}
+            className="mt-6 h-12 rounded bg-emerald-300 px-5 font-semibold text-zinc-950 transition hover:bg-emerald-200 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400"
+          >
+            {decisionState === "saving" ? t.savingLiveDecision : t.saveLiveDecision}
+          </button>
+        </form>
+      </div>
+    </section>
   );
 }
 
@@ -1561,6 +1979,7 @@ function AiSnapshotPanel({ snapshot, t }) {
         <div className="text-right text-xs text-amber-200">
           <p>{t.aiSuggestedSide}: {sideLabel(snapshot.suggested_side, t)}</p>
           <p>{t.aiConfidence}: {snapshot.confidence}/5</p>
+          {snapshot.source ? <p>{t.aiSource}: {snapshot.source}</p> : null}
         </div>
       </div>
       <div className="mt-3 space-y-3 text-xs leading-5 text-zinc-300">
@@ -1587,6 +2006,16 @@ function AiSnapshotPanel({ snapshot, t }) {
             <li key={item}>{item}</li>
           ))}
         </ul>
+      ) : null}
+      {snapshot.hard_to_quantify_factors?.length ? (
+        <div className="mt-3 rounded border border-zinc-700 bg-zinc-950 p-3">
+          <p className="text-xs font-semibold text-zinc-100">{t.aiHardFactors}</p>
+          <ul className="mt-2 space-y-1 text-xs leading-5 text-zinc-400">
+            {snapshot.hard_to_quantify_factors.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+        </div>
       ) : null}
     </div>
   );
@@ -2259,7 +2688,108 @@ function OpenAISettingsPage({
   );
 }
 
-function RecordsPage({ state, data, error, onRefresh, t }) {
+function PortfolioPage({ state, data, error, onRefresh, language, t }) {
+  if (state === "loading" && !data) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
+          {t.loadingPortfolio}
+        </div>
+      </section>
+    );
+  }
+
+  if (error) {
+    return (
+      <section className="mx-auto max-w-6xl px-8 py-12">
+        <div className="rounded-lg border border-red-400/40 bg-red-950/40 p-5 text-red-100">
+          {error}
+        </div>
+      </section>
+    );
+  }
+
+  const stats = data?.stats;
+  const decisions = data?.decisions || [];
+
+  return (
+    <section className="mx-auto max-w-6xl px-8 py-12">
+      <div className="flex items-start justify-between gap-8">
+        <div>
+          <p className="text-sm uppercase text-emerald-200">{t.portfolioKicker}</p>
+          <h1 className="mt-2 text-4xl font-semibold">{t.portfolioTitle}</h1>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">{t.portfolioSubtitle}</p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-emerald-300 hover:text-emerald-200"
+        >
+          {t.refresh}
+        </button>
+      </div>
+
+      {stats ? (
+        <div className="mt-8 grid grid-cols-5 gap-4">
+          <StatBox label={t.portfolioTotal} value={stats.total_decisions} />
+          <StatBox label={t.distribution} value={`${stats.bull_count}/${stats.bear_count}/${stats.neutral_count}`} />
+          <StatBox label={t.portfolioAvgMove} value={formatPercent(stats.average_pct_change, t)} />
+          <StatBox label={t.portfolioAiAgreement} value={formatPercent(stats.ai_agreement_rate, t)} />
+          <StatBox label={t.liveDataSource} value="yfinance" />
+        </div>
+      ) : null}
+
+      <div className="mt-8 overflow-hidden rounded-lg border border-zinc-800">
+        <table className="w-full border-collapse bg-zinc-900 text-left text-sm">
+          <thead className="bg-zinc-950 text-zinc-400">
+            <tr>
+              <th className="px-4 py-3">{t.tableTicker}</th>
+              <th className="px-4 py-3">{t.tableSide}</th>
+              <th className="px-4 py-3">{t.tableConfidence}</th>
+              <th className="px-4 py-3">{t.tablePrice}</th>
+              <th className="px-4 py-3">{t.portfolioCurrentPrice}</th>
+              <th className="px-4 py-3">{t.portfolioPctChange}</th>
+              <th className="px-4 py-3">{t.aiComparison}</th>
+              <th className="px-4 py-3">{t.portfolioRationale}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {decisions.map((decision) => (
+              <tr key={decision.id} className="border-t border-zinc-800 text-zinc-200">
+                <td className="px-4 py-4">
+                  <p className="font-semibold">{decision.ticker}</p>
+                  <p className="mt-1 text-xs text-zinc-500">{formatDateTime(decision.created_at)}</p>
+                </td>
+                <td className="px-4 py-4">{sideLabel(decision.side, t)}</td>
+                <td className="px-4 py-4">{decision.confidence}</td>
+                <td className="px-4 py-4">{formatPrice(decision.price_at_decision, decision.currency, language)}</td>
+                <td className="px-4 py-4">
+                  {decision.current_price == null
+                    ? t.unavailable
+                    : formatPrice(decision.current_price, decision.currency, language)}
+                </td>
+                <td className={`px-4 py-4 ${pctToneClass(decision.pct_change)}`}>
+                  {decision.pct_change == null ? t.unavailable : formatSignedPercent(decision.pct_change)}
+                </td>
+                <td className="px-4 py-4">
+                  {decision.ai_agreement == null ? t.unavailable : decision.ai_agreement ? t.aiAligned : t.aiDifferent}
+                </td>
+                <td className="max-w-[300px] px-4 py-4 text-xs leading-5 text-zinc-400">
+                  {decision.rationale || t.unavailable}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        {decisions.length === 0 ? (
+          <div className="bg-zinc-900 p-8 text-center text-zinc-400">{t.portfolioNoDecisions}</div>
+        ) : null}
+      </div>
+    </section>
+  );
+}
+
+function RecordsPage({ state, data, error, practiceData, practiceState, onRefresh, t }) {
   if (state === "loading" && !data) {
     return (
       <section className="mx-auto max-w-6xl px-8 py-12">
@@ -2282,6 +2812,8 @@ function RecordsPage({ state, data, error, onRefresh, t }) {
 
   const stats = data?.stats;
   const records = data?.records || [];
+  const practiceAttempts = practiceData?.recent_attempts || [];
+  const practiceStats = practiceData?.stats;
 
   return (
     <section className="mx-auto max-w-6xl px-8 py-12">
@@ -2350,6 +2882,64 @@ function RecordsPage({ state, data, error, onRefresh, t }) {
           <div className="bg-zinc-900 p-8 text-center text-zinc-400">{t.noRecords}</div>
         ) : null}
       </div>
+
+      <section className="mt-10 border-t border-zinc-800 pt-8">
+        <div className="flex items-start justify-between gap-8">
+          <div>
+            <p className="text-sm uppercase text-amber-200">{t.practiceKicker}</p>
+            <h2 className="mt-2 text-3xl font-semibold">{t.practiceAttemptRecords}</h2>
+          </div>
+          {practiceStats ? (
+            <div className="grid grid-cols-3 gap-3 text-sm">
+              <StatBox label={t.practiceTotalAttempts} value={practiceStats.total_attempts} />
+              <StatBox label={t.practiceAccuracy} value={formatPercent(practiceStats.accuracy_rate, t)} />
+              <StatBox label={t.practiceMostCommonFocus} value={practiceStats.most_common_focus || t.unavailable} />
+            </div>
+          ) : null}
+        </div>
+
+        {practiceState === "loading" && !practiceData ? (
+          <div className="mt-6 rounded-lg border border-amber-300/40 bg-amber-950/20 p-5 text-amber-100">
+            {t.loadingPractice}
+          </div>
+        ) : null}
+
+        <div className="mt-6 overflow-hidden rounded-lg border border-zinc-800">
+          <table className="w-full border-collapse bg-zinc-900 text-left text-sm">
+            <thead className="bg-zinc-950 text-zinc-400">
+              <tr>
+                <th className="px-4 py-3">{t.tableTicker}</th>
+                <th className="px-4 py-3">{t.tableSide}</th>
+                <th className="px-4 py-3">{t.tableConfidence}</th>
+                <th className="px-4 py-3">{t.tableResult}</th>
+                <th className="px-4 py-3">{t.practiceOutcome}</th>
+                <th className="px-4 py-3">{t.tableRationale}</th>
+                <th className="px-4 py-3">{t.tableFeedback}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {practiceAttempts.map((attempt) => (
+                <tr key={attempt.id} className="border-t border-zinc-800 text-zinc-200">
+                  <td className="px-4 py-4 font-semibold">{attempt.ticker}</td>
+                  <td className="px-4 py-4">{sideLabel(attempt.selected_side, t)}</td>
+                  <td className="px-4 py-4">{attempt.confidence}</td>
+                  <td className={`px-4 py-4 ${attempt.result === "correct" ? "text-emerald-300" : "text-red-300"}`}>
+                    {attempt.result === "correct" ? t.practiceCorrect : t.practiceWrong}
+                  </td>
+                  <td className="px-4 py-4">{formatSignedPercent(attempt.outcome_pct)}</td>
+                  <td className="max-w-[220px] px-4 py-4 text-xs leading-5 text-zinc-400">{attempt.rationale || t.unavailable}</td>
+                  <td className="max-w-[320px] px-4 py-4 text-xs leading-5 text-zinc-300">
+                    {attempt.feedback?.summary || t.unavailable}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {practiceAttempts.length === 0 ? (
+            <div className="bg-zinc-900 p-8 text-center text-zinc-400">{t.noPracticeRecord}</div>
+          ) : null}
+        </div>
+      </section>
     </section>
   );
 }
@@ -2398,6 +2988,26 @@ function formatPercent(value, t) {
 
 function formatSignedPercent(value) {
   return `${value > 0 ? "+" : ""}${Number(value).toFixed(1)}%`;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return "";
+  }
+  return String(value).replace("T", " ").slice(0, 16);
+}
+
+function pctToneClass(value) {
+  if (value == null) {
+    return "text-zinc-400";
+  }
+  if (value > 0) {
+    return "text-emerald-300";
+  }
+  if (value < 0) {
+    return "text-red-300";
+  }
+  return "text-zinc-300";
 }
 
 function formatCompactVolume(value) {

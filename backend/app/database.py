@@ -155,6 +155,24 @@ def init_db() -> None:
         _ensure_column(connection, "practice_attempts", "weights_json", "TEXT NOT NULL DEFAULT '{}'")
         _ensure_column(connection, "practice_attempts", "ai_side", "TEXT")
         _ensure_column(connection, "practice_attempts", "ai_agreement", "INTEGER")
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS portfolio_decisions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                ticker TEXT NOT NULL,
+                side TEXT NOT NULL,
+                confidence INTEGER NOT NULL,
+                rationale TEXT NOT NULL,
+                price_at_decision REAL NOT NULL,
+                currency TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                analysis_json TEXT NOT NULL,
+                ai_side TEXT,
+                ai_agreement INTEGER,
+                data_note TEXT NOT NULL
+            )
+            """
+        )
 
 
 def _ensure_column(

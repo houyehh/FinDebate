@@ -122,6 +122,80 @@ const practiceQuestion = {
   data_cutoff_note: "Visible market data ends at 2026-06-02.",
 };
 
+const practiceAttemptRecord = {
+  id: 7,
+  question_id: "nvda-historical-ai-snapshot",
+  ticker: "NVDA",
+  selected_side: "bull",
+  confidence: 4,
+  rationale: "MA10, MACD, and AI thesis all pointed to follow-through.",
+  weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
+  answer_side: "bull",
+  outcome_pct: 8.4,
+  result: "correct",
+  ai_side: "bull",
+  ai_agreement: true,
+  future_results: [],
+  created_at: "2026-07-20T00:00:00+00:00",
+  feedback: {
+    summary: "A correct result still needs evidence quality.",
+    probable_causes: ["Direction was right, but keep checking counter-risk."],
+    improvement_steps: ["State one disconfirming signal next time."],
+    focus_tags: ["evidence"],
+    diagnosis: "Good evidence density.",
+    missed_signals: [],
+    good_reasoning: ["You cited concrete indicators."],
+    next_drill_focus: "Counter-risk discipline.",
+    suggested_framework: "Start with the strongest measurable signal.",
+  },
+};
+
+const liveAnalysis = {
+  ticker: "NVDA",
+  name: "NVIDIA Corporation",
+  as_of: "2026-06-02",
+  price: 123.45,
+  currency: "USD",
+  market_window: practiceQuestion.market_window,
+  technical_snapshot: practiceQuestion.technical_snapshot,
+  fundamental_snapshot: practiceQuestion.fundamental_snapshot,
+  news_snapshot: practiceQuestion.news_snapshot,
+  chip_snapshot: practiceQuestion.chip_snapshot,
+  ai_snapshot: practiceQuestion.ai_snapshot,
+  bull_points: practiceQuestion.bull_points,
+  bear_points: practiceQuestion.bear_points,
+  data_note: "Live analysis uses latest available yfinance data.",
+  source_summary: "Market data comes from Yahoo Finance/yfinance and AI is generated from the visible evidence.",
+};
+
+const portfolioResponse = {
+  stats: {
+    total_decisions: 1,
+    bull_count: 0,
+    bear_count: 1,
+    neutral_count: 0,
+    average_pct_change: 5.3,
+    ai_agreement_rate: 0,
+  },
+  decisions: [
+    {
+      id: 4,
+      ticker: "NVDA",
+      side: "bear",
+      confidence: 4,
+      rationale: "Valuation risk outweighed momentum.",
+      price_at_decision: 123.45,
+      current_price: 130,
+      pct_change: 5.3,
+      currency: "USD",
+      created_at: "2026-07-20T00:00:00+00:00",
+      ai_side: "bull",
+      ai_agreement: false,
+      data_note: "Live analysis uses latest available yfinance data.",
+    },
+  ],
+};
+
 const judgedDebate = {
   ticker: "NVDA",
   language: "zh-Hant",
@@ -284,6 +358,26 @@ describe("App", () => {
         return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(tsmcSnapshot)) });
       }
 
+      if (url.startsWith("/api/live-analysis/NVDA")) {
+        return Promise.resolve({ ok: true, text: () => Promise.resolve(JSON.stringify(liveAnalysis)) });
+      }
+
+      if (url.startsWith("/api/live-analysis/2330.TW")) {
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                ...liveAnalysis,
+                ticker: "2330.TW",
+                name: "Taiwan Semiconductor Manufacturing Company",
+                price: 980,
+                currency: "TWD",
+              }),
+            ),
+        });
+      }
+
       if (url === "/api/settings/openai" && options.method === "POST") {
         const body = JSON.parse(options.body);
         return Promise.resolve({
@@ -408,9 +502,41 @@ describe("App", () => {
                   top_weaknesses: [],
                 },
                 questions: [practiceQuestion],
-                recent_attempts: [],
+                recent_attempts: [practiceAttemptRecord],
               }),
             ),
+        });
+      }
+
+      if (url === "/api/portfolio/decisions" && options.method === "POST") {
+        const body = JSON.parse(options.body);
+        return Promise.resolve({
+          ok: true,
+          text: () =>
+            Promise.resolve(
+              JSON.stringify({
+                id: 4,
+                ticker: body.ticker,
+                side: body.side,
+                confidence: body.confidence,
+                rationale: body.rationale,
+                price_at_decision: body.analysis.price,
+                current_price: body.analysis.price,
+                pct_change: 0,
+                currency: body.analysis.currency,
+                created_at: "2026-07-20T00:00:00+00:00",
+                ai_side: "bull",
+                ai_agreement: body.side === "bull",
+                data_note: body.analysis.data_note,
+              }),
+            ),
+        });
+      }
+
+      if (url === "/api/portfolio") {
+        return Promise.resolve({
+          ok: true,
+          text: () => Promise.resolve(JSON.stringify(portfolioResponse)),
         });
       }
 
@@ -514,6 +640,39 @@ describe("App", () => {
     expect(await screen.findByText("NVIDIA Corporation")).toBeInTheDocument();
     expect(screen.getAllByText("NVDA").length).toBeGreaterThan(1);
     expect(screen.getByRole("img", { name: "30 day price line chart" })).toBeInTheDocument();
+    expect(await screen.findByText("記錄這一刻的判斷")).toBeInTheDocument();
+    expect(screen.getByText("Market data comes from Yahoo Finance/yfinance and AI is generated from the visible evidence.")).toBeInTheDocument();
+  });
+
+  it("records a live analysis decision into portfolio tracking", async () => {
+    render(<App />);
+
+    fireEvent.submit(screen.getByRole("button", { name: "查詢" }).closest("form"));
+    expect(await screen.findByText("記錄這一刻的判斷")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "看空" }));
+    fireEvent.change(screen.getByLabelText("當下決策理由"), {
+      target: { value: "Valuation risk outweighed momentum." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "記錄到 Portfolio" }));
+
+    expect(await screen.findByText("已記錄到 Portfolio；之後可到 Portfolio 追蹤。")).toBeInTheDocument();
+    const decisionCall = global.fetch.mock.calls.find(
+      ([url, options]) => url === "/api/portfolio/decisions" && options?.method === "POST",
+    );
+    expect(JSON.parse(decisionCall[1].body)).toMatchObject({
+      ticker: "NVDA",
+      side: "bear",
+      confidence: 3,
+      rationale: "Valuation risk outweighed momentum.",
+      language: "zh-Hant",
+      weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Portfolio" }));
+    expect(await screen.findByText("當下決策追蹤")).toBeInTheDocument();
+    expect(screen.getByText("Valuation risk outweighed momentum.")).toBeInTheDocument();
+    expect(screen.getByText("+5.3%")).toBeInTheDocument();
   });
 
   it("starts a judged debate and reveals scores only after verdict", async () => {
@@ -565,6 +724,8 @@ describe("App", () => {
     expect(screen.getAllByText("50%").length).toBeGreaterThan(1);
     expect(screen.getByText("110.00 (+10.00%) 勝")).toBeInTheDocument();
     expect(screen.getByText("待結算")).toBeInTheDocument();
+    expect(await screen.findByText("練習作答紀錄")).toBeInTheDocument();
+    expect(screen.getByText("A correct result still needs evidence quality.")).toBeInTheDocument();
   });
 
   it("submits a historical practice answer with dimension weights", async () => {

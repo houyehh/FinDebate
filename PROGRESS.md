@@ -1,5 +1,35 @@
 # 開發進度
 
+## 2026-07-21 即時分析、投資組合與紀錄頁補強
+
+### 做了什麼
+- 新增 `GET /api/live-analysis/{ticker}`，使用當天最新 yfinance 價格、K 線、MA10/MA20、布林通道、量能、KD、MACD、基本面與新聞摘要，輸出與練習頁一致的工作台資料。
+- 新增 `portfolio_decisions` SQLite 資料表與 `POST /api/portfolio/decisions`、`GET /api/portfolio`，可記錄即時決策的方向、信心、理由、進場價格、AI 方向與後續追蹤報酬。
+- 將首頁即時分析改成標的搜尋後直接顯示工作台，使用者可在工作台底部送出當下決策，送出後可到 Portfolio 追蹤。
+- Records 頁補上 practice 作答紀錄與教練回饋，讓頁面不只看 7 天回測，也能回看每題判斷理由與回饋。
+- AI 面內容在繁中 UI 下改為繁中文案，並顯示 AI 來源、難量化因素、AI 檢查清單，避免看起來像固定罐頭。
+- 前端 API 呼叫改為共用 fallback fetch，讓目前前端在 `5184` 時可自動連到可用的本機後端 port。
+- 補上 live analysis 與 portfolio 的後端測試、前端流程測試。
+
+### 關鍵決定
+- 不把翻譯 API 或 OpenAI key 放在前端；前端可顯示中文，但翻譯/語言控制應由後端或已驗證資料層處理，避免使用者 key 暴露與不可控成本。
+- Practice 的歷史題維持防偷看未來資料：歷史題不硬塞最新基本面；Live Analysis 才使用當天最新基本面與新聞。
+- AI 面目前以可見指標、基本面與新聞摘要組成規則化分析，確保每次回覆能追溯到本題資料，不是無來源的 canned response。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m py_compile backend\app\live_analysis.py backend\app\main.py backend\app\database.py backend\app\practice.py`：通過。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：35 passed。
+- `npm.cmd test -- --run`：11 passed。
+- `npm.cmd run build`：通過。
+- In-app browser 驗證：搜尋 `NVDA` 後可載入即時工作台；繁中 AI 面顯示中文；送出即時決策後 Portfolio 顯示該筆追蹤；Records 顯示 practice 作答理由與教練回饋。
+
+### 遇到的問題
+- 目前本機 `8000` port 仍像是舊後端，新的 endpoints 在 `8020` 可用；前端 fallback 已可自動改打可用後端，但正式展示前建議重啟後端保持 port 一致。
+- Vitest/build 在 Windows sandbox 讀取 Vite config 時會被擋，已用核准的 escalated command 完成驗收。
+
+### 下一步
+- 將比賽影片主線調整為：Practice 歷史題訓練 → AI 面協助修正判斷 → Live Analysis 即時決策 → Portfolio 後續追蹤 → Records 回看練習回饋。
+
 ## 2026-07-18 任務 1：專案骨架
 
 ### 做了什麼

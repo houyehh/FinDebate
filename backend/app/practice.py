@@ -979,6 +979,48 @@ def _ai_snapshot(
     )
 
 
+def localized_ai_snapshot(
+    ticker: str,
+    point: MarketIndicatorPoint,
+    window: list[MarketIndicatorPoint],
+    snapshot: AiSnapshot,
+    language: str,
+) -> AiSnapshot:
+    if not language.startswith("zh"):
+        return snapshot
+
+    pct20 = _window_pct(window, 20)
+    volume_ratio = point.volume / point.volume_ma20 if point.volume_ma20 else 1
+    narrative = _ticker_narrative_zh(ticker)
+
+    return AiSnapshot(
+        suggested_side=snapshot.suggested_side,
+        confidence=snapshot.confidence,
+        bull_thesis=(
+            f"{ticker} 的 20 日趨勢為 {pct20:+.2f}%，若價格守在 MA20 上方，且 "
+            f"{volume_ratio:.2f} 倍量能能延續，看多假設才有資料支撐。"
+        ),
+        bear_thesis=(
+            f"{ticker} 若已提前反映利多、MACD 動能轉弱，或 {volume_ratio:.2f} 倍量能其實是派發，"
+            "短線看空/觀望會比追價更合理。"
+        ),
+        narrative=f"{narrative} 目前 AI 面偏向{_side_label(snapshot.suggested_side, True)}。",
+        hard_to_quantify_factors=[
+            "近期動能帶來的市場心理",
+            "投資人對估值與不確定性的容忍度",
+            "新聞/題材是否已經反映在價格裡",
+        ],
+        key_uncertainty="AI 可能過度貼合已經可見的價格走勢；採用前要用硬指標與新聞/基本面交叉驗證。",
+        checklist=[
+            "AI 論點是否引用了具體指標或數字？",
+            "技術動能是否支持 AI 的方向？",
+            "新聞/題材與基本面是否確認或反駁 AI 論點？",
+            "哪一個證據出現會讓 AI 論點失效？",
+        ],
+        source=snapshot.source,
+    )
+
+
 def _indicator_summary(point: MarketIndicatorPoint, window: list[MarketIndicatorPoint], zh: bool) -> list[str]:
     pct5 = _window_pct(window, 5)
     pct20 = _window_pct(window, 20)
@@ -1088,6 +1130,14 @@ def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
         )
         if case.market_window:
             data["indicator_summary"] = _indicator_summary(case.market_window[-1], case.market_window, True)
+        if case.ai_snapshot and case.market_window:
+            data["ai_snapshot"] = localized_ai_snapshot(
+                case.ticker,
+                case.market_window[-1],
+                case.market_window,
+                case.ai_snapshot,
+                language,
+            ).model_dump(mode="json")
     elif case.market_window:
         data["indicator_summary"] = _indicator_summary(case.market_window[-1], case.market_window, False)
     return PracticeQuestion(**data)
@@ -1743,6 +1793,18 @@ def _ticker_narrative(ticker: str, side: VerdictSide) -> str:
     }
     base = themes.get(ticker, "Investor psychology can shift faster than slowly moving fundamentals.")
     return f"{base} Current AI side: {_side_label(side, False)}."
+
+
+def _ticker_narrative_zh(ticker: str) -> str:
+    themes = {
+        "NVDA": "AI 基礎建設預期會同時放大上修想像與估值焦慮。",
+        "AAPL": "品質與現金流能支撐評價，但需求循環失望也會主導短線。",
+        "TSLA": "市場敘事會在成長選擇權、毛利壓力與執行風險之間快速切換。",
+        "MSFT": "穩定軟體現金流可支撐回檔，但 AI 資本支出預期會牽動情緒。",
+        "BTC-USD": "加密資產心理常受流動性、ETF 資金流與擁擠部位影響。",
+        "2330.TW": "AI 半導體需求可抵消景氣疑慮，但匯率與地緣風險仍需納入。",
+    }
+    return themes.get(ticker, "投資人心理可能比基本面更快轉向，短線需要檢查敘事是否已反映。")
 
 
 def _text(zh: bool, zh_text: str, en_text: str) -> str:

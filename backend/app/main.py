@@ -15,6 +15,15 @@ from app.debate import (
     generate_round_one_debate,
     generate_two_round_debate,
 )
+from app.live_analysis import (
+    LiveAnalysisResponse,
+    PortfolioDecisionRecord,
+    PortfolioDecisionRequest,
+    PortfolioResponse,
+    get_live_analysis,
+    get_portfolio,
+    save_portfolio_decision,
+)
 from app.market_data import TickerLookupError, TickerSearchResult, TickerSnapshot, get_ticker_snapshot, search_tickers
 from app.practice import (
     PracticeAttemptRecord,
@@ -201,6 +210,39 @@ def submit_verdict(request: VerdictSubmitRequest) -> VerdictRecord:
 @app.get("/api/records", response_model=ScoreboardResponse)
 def read_records() -> ScoreboardResponse:
     return get_scoreboard()
+
+
+@app.get("/api/live-analysis/{ticker}", response_model=LiveAnalysisResponse)
+def read_live_analysis(ticker: str, language: str = "zh-Hant") -> LiveAnalysisResponse:
+    try:
+        return get_live_analysis(ticker, language)
+    except TickerLookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": exc.message,
+                "examples": ["NVDA", "2330.TW", "BTC-USD"],
+            },
+        ) from exc
+
+
+@app.post("/api/portfolio/decisions", response_model=PortfolioDecisionRecord)
+def create_portfolio_decision(request: PortfolioDecisionRequest) -> PortfolioDecisionRecord:
+    try:
+        return save_portfolio_decision(request)
+    except TickerLookupError as exc:
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "message": exc.message,
+                "examples": ["NVDA", "2330.TW", "BTC-USD"],
+            },
+        ) from exc
+
+
+@app.get("/api/portfolio", response_model=PortfolioResponse)
+def read_portfolio() -> PortfolioResponse:
+    return get_portfolio()
 
 
 @app.get("/api/practice", response_model=PracticeDashboardResponse)
