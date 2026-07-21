@@ -1,5 +1,39 @@
 # 開發進度
 
+## 2026-07-21 README 與英文投稿影片重製
+
+### 做了什麼
+- 將 README 改寫為評審優先的 Alpha Gym 版本：開頭直接說明「AI 投資判斷訓練場」定位，並更新 Market Replay、Live Desk、Portfolio Lab、Review Center、AI Debate、GPT-first/fallback、BYOK/Demo Mode、限制與測試路徑。
+- 更新 `submission_assets/devpost_form_guide.md`，將投稿名稱、tagline、description、測試步驟與影片路徑改成 Alpha Gym 新定位。
+- 重寫 `scripts/render_competition_video.ps1`，改為產出英文旁白稿、英文 SRT、燒錄英文字幕的 1920x1080 MP4，並加入低音量轉場音效。
+- 產出新影片：`submission_assets/generated/competition_video/alpha_gym_competition_captioned_en.mp4`，長度約 2:46，含英文語音、英文字幕與 AAC 音軌。
+- 移除舊的 Bull vs Bear / 中文配音投稿素材，避免 repo 內同時存在兩套互相衝突的產品敘事。
+
+### 關鍵決定
+- 投稿主軸從「AI 多空辯論」改為「AI 時代的人類投資判斷訓練」，讓評審更容易理解差異化價值。
+- README 採英文主文優先、繁中摘要補充，降低國際評審閱讀成本。
+- 影片使用本機 Windows SAPI 英文聲音與 FFmpeg，不依賴 OpenAI quota；OpenAI 真實使用路徑則在 README 與影片中明確說明為 GPT-first 並透明 fallback。
+- Generated MP4 繼續不進 Git，只提交可重製影片的腳本、旁白稿與字幕檔。
+
+### 驗收測試
+- `powershell.exe -ExecutionPolicy Bypass -File .\scripts\render_competition_video.ps1`：通過，輸出英文字幕/英文語音 MP4。
+- FFmpeg metadata 驗證：影片約 00:02:46.64、1920x1080、30 fps、H.264 + AAC audio。
+- 抽查 `preview_alpha_35s.png`、`preview_alpha_58s.png`、`preview_alpha_72s.png`：確認新品牌畫面、英文字幕與證據頁排版未明顯遮擋。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：40 passed，1 個既有 Starlette/httpx deprecation warning。
+- `npm.cmd test`：13 passed。
+- `npm.cmd run build`：通過。
+
+### 遇到問題
+- PowerShell 直接執行腳本時被 Execution Policy 擋下，改用單次 `-ExecutionPolicy Bypass` 執行，不修改系統設定。
+- 沙盒環境無法使用 Windows SAPI 產生語音，需用 escalated 本機權限執行影片腳本。
+- 前端測試第一次在沙盒下遇到 esbuild 讀取 Vite config 權限問題；使用 escalated 本機權限重跑後通過。
+- 初版影片超過 3 分鐘且有局部字幕/標題排版問題；已調整旁白語速、縮短緩衝、修正 header、字幕框與證據頁 bullet。
+
+### 下一步
+- 將 `alpha_gym_competition_captioned_en.mp4` 上傳到 YouTube（公開或不公開連結皆可），再把 URL 填入 Devpost。
+- 在主 Codex thread 執行 `/feedback` 取得 Session ID，並填入 OpenAI Build Week 投稿表單。
+- 投稿前建議再用 README 的 Judge Testing Path 走一次 Demo Mode 與 OpenAI API mode（若有可用 key）確認畫面來源標籤符合預期。
+
 ## 2026-07-21 AI 面 GPT-first 與基本面 grid
 
 ### 做了什麼

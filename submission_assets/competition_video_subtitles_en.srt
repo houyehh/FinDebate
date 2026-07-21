@@ -1,0 +1,48 @@
+﻿1
+00:00:00,000 --> 00:00:09,557
+AI gives answers. Alpha Gym trains judgment.
+
+2
+00:00:09,557 --> 00:00:23,891
+Replay, decide, reveal, and review: the user stays responsible for the judgment.
+
+3
+00:00:23,891 --> 00:00:37,032
+The home page frames the app as a decision hall, not another generic dashboard.
+
+4
+00:00:37,032 --> 00:00:52,561
+Users practice on past snapshots without future leakage, then reveal the true outcome.
+
+5
+00:00:52,561 --> 00:01:08,091
+A fixed hover inspector keeps daily OHLC and indicators above the chart.
+
+6
+00:01:08,091 --> 00:01:22,425
+Fundamentals include valuation and quality signals instead of one long paragraph.
+
+7
+00:01:22,425 --> 00:01:39,149
+GPT is used for AI summaries, debate, judge scoring, and personalized coaching.
+
+8
+00:01:39,149 --> 00:01:54,679
+The coach critiques the submitted reasoning, not a canned template.
+
+9
+00:01:54,679 --> 00:02:09,014
+Live analysis uses the same workbench, then records entry price, time, side, and rationale.
+
+10
+00:02:09,014 --> 00:02:23,349
+The app separates live portfolio decisions from historical practice answers.
+
+11
+00:02:23,349 --> 00:02:37,683
+Codex built the full stack; GPT-5.6 powers the AI path through structured JSON.
+
+12
+00:02:37,683 --> 00:02:47,240
+GitHub: github.com/houyehh/FinDebate
+
