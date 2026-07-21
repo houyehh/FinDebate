@@ -58,6 +58,9 @@ const practiceQuestion = {
       volume_ma20: 900000,
       ma5: 120,
       ma20: 118,
+      bb_middle: 118,
+      bb_upper: 124,
+      bb_lower: 112,
       rsi: 55,
       k: 55,
       d: 50,
@@ -77,6 +80,9 @@ const practiceQuestion = {
       volume_ma20: 1000000,
       ma5: 121,
       ma20: 119,
+      bb_middle: 119,
+      bb_upper: 125,
+      bb_lower: 113,
       rsi: 65,
       k: 65,
       d: 58,
@@ -88,6 +94,7 @@ const practiceQuestion = {
   ],
   technical_snapshot: [
     { label: "MA5 / MA20", value: "121.00 / 119.00", detail: "Trend proxy.", tone: "bull" },
+    { label: "Bollinger", value: "87% band", detail: "Close location relative to 20D bands.", tone: "warn" },
   ],
   fundamental_snapshot: [
     { label: "Revenue growth", value: "+10.0%", detail: "Latest proxy.", tone: "bull" },
@@ -564,9 +571,11 @@ describe("App", () => {
     expect(screen.getByText(/Training goal/)).toBeInTheDocument();
     expect(screen.getAllByText("Technical").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Fundamental").length).toBeGreaterThan(0);
-    expect(screen.getAllByText("Chip proxy").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Price-volume proxy").length).toBeGreaterThan(0);
     expect(screen.getByText(/AI suggested side/)).toBeInTheDocument();
-    expect(screen.getByText("K-line / Price-Volume / KD / MACD")).toBeInTheDocument();
+    expect(screen.getByText("K-line / MA / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
+    expect(screen.getAllByText("Bollinger Bands").length).toBeGreaterThan(0);
+    expect(screen.getByText("Answer after reading")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Bearish" }));
     fireEvent.change(screen.getByLabelText("Judgment rationale"), {
@@ -588,7 +597,7 @@ describe("App", () => {
       confidence: 3,
       rationale: "MACD is positive, but valuation risk looks too high.",
       language: "en",
-      weights: { technical: 35, fundamental: 20, chip: 20, ai: 25 },
+      weights: { technical: 45, fundamental: 25, chip: 0, ai: 30 },
     });
   });
 
@@ -647,7 +656,7 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "Practice" }));
 
     expect(await screen.findByText("Historical Backtest Drills")).toBeInTheDocument();
-    expect(screen.getByText("K-line / Price-Volume / KD / MACD")).toBeInTheDocument();
+    expect(screen.getByText("K-line / MA / Bollinger Bands / Price-Volume / KD / MACD")).toBeInTheDocument();
     expect(global.fetch).toHaveBeenCalledWith(
       expect.stringContaining("http://127.0.0.1:8030/api/practice?"),
       {},

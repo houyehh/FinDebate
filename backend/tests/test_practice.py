@@ -228,3 +228,7 @@ def test_random_market_question_contains_historical_factor_snapshots(monkeypatch
     assert last_point.d is not None
     assert last_point.macd is not None
     assert last_point.rsi is not None
+    assert last_point.bb_upper is not None
+    assert last_point.bb_middle is not None
+    assert last_point.bb_lower is not None
+    assert any(metric.label == "Bollinger" for metric in question.technical_snapshot)

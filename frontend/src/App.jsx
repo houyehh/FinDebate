@@ -1080,10 +1080,10 @@ function PracticePage({
   const [confidence, setConfidence] = useState(3);
   const [rationale, setRationale] = useState("");
   const [weights, setWeights] = useState({
-    technical: 35,
-    fundamental: 20,
-    chip: 20,
-    ai: 25,
+    technical: 45,
+    fundamental: 25,
+    chip: 0,
+    ai: 30,
   });
   const [attempt, setAttempt] = useState(null);
   const [submitState, setSubmitState] = useState("idle");
@@ -1095,7 +1095,7 @@ function PracticePage({
     setSide("bull");
     setConfidence(3);
     setRationale("");
-    setWeights({ technical: 35, fundamental: 20, chip: 20, ai: 25 });
+    setWeights({ technical: 45, fundamental: 25, chip: 0, ai: 30 });
     setAttempt(null);
     setSubmitError("");
     setSubmitState("idle");
@@ -1143,7 +1143,7 @@ function PracticePage({
         confidence,
         rationale,
         language,
-        weights,
+        weights: { ...weights, chip: 0 },
       });
       setAttempt(result);
       setSubmitState("saved");
@@ -1164,23 +1164,38 @@ function PracticePage({
 
   const stats = data?.stats;
   const recentAttempts = data?.recent_attempts || [];
-  const weightTotal = weights.technical + weights.fundamental + weights.chip + weights.ai;
+  const weightTotal = weights.technical + weights.fundamental + weights.ai;
+  const latestPoint = question.market_window?.[question.market_window.length - 1];
+  const answerSectionId = "practice-answer";
+
+  function goToAnswer() {
+    document.getElementById(answerSectionId)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
 
   return (
-    <section className="mx-auto max-w-6xl px-8 py-12">
+    <section className="mx-auto max-w-7xl px-8 py-12">
       <div className="flex items-start justify-between gap-8">
         <div>
           <p className="text-sm uppercase text-amber-200">{t.practiceKicker}</p>
           <h1 className="mt-2 text-4xl font-semibold">{t.practiceTitle}</h1>
-          <p className="mt-3 max-w-3xl text-sm leading-6 text-zinc-400">{t.practiceSubtitle}</p>
+          <p className="mt-3 max-w-4xl text-sm leading-6 text-zinc-400">{t.practiceSubtitle}</p>
         </div>
-        <button
-          type="button"
-          onClick={refreshQuestions}
-          className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200"
-        >
-          {t.randomPractice}
-        </button>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={refreshQuestions}
+            className="rounded border border-zinc-700 px-4 py-2 text-sm text-zinc-300 transition hover:border-amber-300 hover:text-amber-200 whitespace-nowrap"
+          >
+            {t.randomPractice}
+          </button>
+          <button
+            type="button"
+            onClick={goToAnswer}
+            className="rounded bg-amber-300 px-4 py-2 text-sm font-semibold text-zinc-950 transition hover:bg-amber-200 whitespace-nowrap"
+          >
+            {t.practiceAnswerCta}
+          </button>
+        </div>
       </div>
 
       {stats ? (
@@ -1204,79 +1219,125 @@ function PracticePage({
         </div>
       ) : null}
 
-      <div className="mt-8 grid grid-cols-[1.2fr_0.8fr] gap-8">
-        <article className="rounded-lg border border-zinc-800 bg-zinc-900 p-7">
-          <div className="flex items-start justify-between gap-6">
-            <div>
-              <p className="text-sm uppercase text-zinc-400">
-                {t.practiceQuestion} {currentIndex + 1}/{questions.length}
-              </p>
-              <h2 className="mt-2 text-3xl font-semibold">{question.ticker}: {question.title}</h2>
-              <p className="mt-2 text-sm text-zinc-500">
-                {t.dataCutoff}: {question.as_of}
-              </p>
+      <article className="mt-8 border-y border-zinc-800 py-7">
+        <div className="grid grid-cols-[1fr_280px] gap-8">
+          <div>
+            <p className="text-sm uppercase text-zinc-400">
+              {t.practiceQuestion} {currentIndex + 1}/{questions.length}
+            </p>
+            <h2 className="mt-2 text-3xl font-semibold leading-tight">{question.ticker}: {question.title}</h2>
+            <p className="mt-5 max-w-4xl text-sm leading-6 text-zinc-300">{question.scenario}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs text-zinc-500">{t.dataCutoff}</p>
+              <p className="mt-1 font-semibold text-zinc-100">{question.as_of}</p>
             </div>
-            <div className="text-right text-sm text-zinc-400">
-              <p>{question.horizon_days}D</p>
-              <p>{formatPrice(question.price, question.currency, language)}</p>
+            <div className="border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs text-zinc-500">{t.practiceHorizon}</p>
+              <p className="mt-1 font-semibold text-zinc-100">{question.horizon_days}D</p>
+            </div>
+            <div className="col-span-2 border border-zinc-800 bg-zinc-950 p-3">
+              <p className="text-xs text-zinc-500">{t.practiceAsOfPrice}</p>
+              <p className="mt-1 text-xl font-semibold text-zinc-100">
+                {formatPrice(question.price, question.currency, language)}
+              </p>
             </div>
           </div>
+        </div>
 
-          <p className="mt-6 text-sm leading-6 text-zinc-300">{question.scenario}</p>
-          {question.training_goal ? (
-            <div className="mt-5 rounded border border-amber-300/30 bg-amber-950/20 p-4 text-sm leading-6 text-amber-100">
-              <span className="font-semibold">{t.trainingGoal}: </span>
-              {question.training_goal}
-            </div>
-          ) : null}
-          {question.data_cutoff_note ? (
-            <p className="mt-3 text-xs leading-5 text-zinc-500">{question.data_cutoff_note}</p>
-          ) : null}
-          <div className="mt-5 flex flex-wrap gap-2">
-            {question.focus_tags.map((tag) => (
-              <span key={tag} className="rounded border border-zinc-700 px-2 py-1 text-xs text-zinc-400">
-                {tag}
-              </span>
-            ))}
+        {question.training_goal ? (
+          <div className="mt-6 border border-amber-300/30 bg-amber-950/20 p-4 text-sm leading-6 text-amber-100">
+            <span className="font-semibold">{t.trainingGoal}: </span>
+            {question.training_goal}
           </div>
+        ) : null}
 
-          {question.indicator_summary?.length ? (
-            <div className="mt-6 grid grid-cols-4 gap-3">
-              {question.indicator_summary.map((item) => (
-                <div key={item} className="rounded border border-zinc-800 bg-zinc-950 p-3 text-xs leading-5 text-zinc-300">
-                  {item}
-                </div>
+        <div className="mt-5 flex items-start justify-between gap-6">
+          <div>
+            {question.data_cutoff_note ? (
+              <p className="text-xs leading-5 text-zinc-500">{question.data_cutoff_note}</p>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              {question.focus_tags.map((tag) => (
+                <span key={tag} className="border border-zinc-700 px-2 py-1 text-xs text-zinc-400">
+                  {tag}
+                </span>
               ))}
             </div>
+          </div>
+          {latestPoint ? (
+            <p className="shrink-0 text-right text-xs leading-5 text-zinc-500">
+              {t.practiceLatestVisibleClose}<br />
+              <span className="text-zinc-200">{latestPoint.close.toFixed(2)}</span>
+            </p>
           ) : null}
+        </div>
 
-          {question.market_window?.length ? (
-            <div className="mt-6">
-              <MarketIndicatorChart points={question.market_window} t={t} />
+        {question.indicator_summary?.length ? (
+          <div className="mt-6 grid grid-cols-4 gap-3">
+            {question.indicator_summary.map((item) => (
+              <div key={item} className="border border-zinc-800 bg-zinc-950 p-3 text-xs leading-5 text-zinc-300">
+                {item}
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </article>
+
+      {question.market_window?.length ? (
+        <section className="mt-8">
+          <div className="mb-4 flex items-end justify-between gap-6">
+            <div>
+              <h2 className="text-2xl font-semibold">{t.technicalChartTitle}</h2>
+              <p className="mt-2 text-sm text-zinc-400">{t.practiceChartLead}</p>
             </div>
-          ) : null}
-
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            <MetricPanel title={t.technicalDimension} metrics={question.technical_snapshot || []} />
-            <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
-            <MetricPanel title={t.chipDimension} metrics={question.chip_snapshot || []} />
-            <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} />
           </div>
+          <MarketIndicatorChart points={question.market_window} t={t} />
+        </section>
+      ) : null}
 
-          <div className="mt-7 grid grid-cols-2 gap-5">
-            <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
-            <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points} />
+      <section className="mt-8">
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <h2 className="text-2xl font-semibold">{t.practiceDimensionReview}</h2>
+            <p className="mt-2 text-sm text-zinc-400">{t.practiceDimensionLead}</p>
           </div>
+          <p className="max-w-sm text-right text-xs leading-5 text-zinc-500">{t.priceVolumeProxyNote}</p>
+        </div>
 
-          <p className="mt-7 rounded border border-amber-300/30 bg-amber-950/20 p-4 text-sm text-amber-100">
-            {question.prompt}
-          </p>
-        </article>
+        <div className="mt-5 grid grid-cols-3 gap-4">
+          <MetricPanel title={t.technicalDimension} metrics={question.technical_snapshot || []} />
+          <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
+          <AiSnapshotPanel snapshot={question.ai_snapshot} t={t} />
+        </div>
 
-        <div className="space-y-6">
-          <form className="rounded-lg border border-zinc-800 bg-zinc-900 p-6" onSubmit={submitAttempt}>
+        {question.chip_snapshot?.length ? (
+          <MetricStrip title={t.priceVolumeProxy} metrics={question.chip_snapshot} />
+        ) : null}
+      </section>
+
+      <section className="mt-8">
+        <div className="grid grid-cols-2 gap-5">
+          <PracticeClueList title={t.practiceBullClues} tone="bull" items={question.bull_points} />
+          <PracticeClueList title={t.practiceBearClues} tone="bear" items={question.bear_points} />
+        </div>
+
+        <p className="mt-6 border border-amber-300/30 bg-amber-950/20 p-4 text-sm text-amber-100">
+          {question.prompt}
+        </p>
+      </section>
+
+      <section id={answerSectionId} className="mt-10 border-t border-zinc-800 pt-8">
+        <div className="grid grid-cols-[0.75fr_1.25fr] gap-8">
+          <div>
             <p className="text-sm uppercase text-amber-200">{t.practiceYourAnswer}</p>
-            <div className="mt-5 grid grid-cols-3 gap-3">
+            <h2 className="mt-2 text-3xl font-semibold">{t.answerAfterReview}</h2>
+            <p className="mt-3 text-sm leading-6 text-zinc-400">{t.practiceReadFirst}</p>
+          </div>
+
+          <form className="border border-zinc-800 bg-zinc-900 p-6" onSubmit={submitAttempt}>
+            <div className="grid grid-cols-3 gap-3">
               {[
                 ["bull", t.bullSide],
                 ["bear", t.bearSide],
@@ -1318,11 +1379,10 @@ function PracticePage({
                 </p>
               </div>
               <p className="mt-1 text-xs text-zinc-500">{t.weightTotalHint}</p>
-              <div className="mt-4 space-y-4">
+              <div className="mt-4 grid grid-cols-3 gap-4">
                 {[
                   ["technical", t.technicalDimension],
                   ["fundamental", t.fundamentalDimension],
-                  ["chip", t.chipDimension],
                   ["ai", t.aiDimension],
                 ].map(([key, label]) => (
                   <label key={key} className="block text-xs text-zinc-400">
@@ -1339,6 +1399,7 @@ function PracticePage({
                       onChange={(event) =>
                         setWeights((current) => ({
                           ...current,
+                          chip: 0,
                           [key]: Number(event.target.value),
                         }))
                       }
@@ -1361,7 +1422,7 @@ function PracticePage({
             />
 
             {submitError ? (
-              <div className="mt-5 rounded border border-red-400/40 bg-red-950/40 p-3 text-sm text-red-100">
+              <div className="mt-5 border border-red-400/40 bg-red-950/40 p-3 text-sm text-red-100">
                 {submitError}
               </div>
             ) : null}
@@ -1374,12 +1435,14 @@ function PracticePage({
               {submitState === "saving" ? t.submittingPractice : t.submitPractice}
             </button>
           </form>
-
-          {attempt ? (
-            <PracticeFeedbackPanel attempt={attempt} onNext={goToNextQuestion} t={t} />
-          ) : null}
         </div>
-      </div>
+
+        {attempt ? (
+          <div className="mt-8">
+            <PracticeFeedbackPanel attempt={attempt} onNext={goToNextQuestion} t={t} />
+          </div>
+        ) : null}
+      </section>
 
       <div className="mt-8 rounded-lg border border-zinc-800 bg-zinc-900 p-6">
         <h2 className="text-xl font-semibold">{t.practiceRecent}</h2>
@@ -1426,6 +1489,27 @@ function MetricPanel({ title, metrics }) {
       ) : (
         <p className="mt-3 text-sm text-zinc-500">No data</p>
       )}
+    </div>
+  );
+}
+
+function MetricStrip({ title, metrics }) {
+  return (
+    <div className="mt-4 border border-zinc-800 bg-zinc-950 p-4">
+      <h3 className="text-sm font-semibold text-zinc-100">{title}</h3>
+      <div className="mt-3 grid grid-cols-4 gap-3">
+        {metrics.map((metric) => (
+          <div key={`${title}-${metric.label}`} className="border border-zinc-800 bg-zinc-900 p-3">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-xs text-zinc-500">{metric.label}</p>
+              <span className={`text-xs font-semibold ${metricToneClass(metric.tone)}`}>
+                {metric.value}
+              </span>
+            </div>
+            {metric.detail ? <p className="mt-2 text-xs leading-5 text-zinc-400">{metric.detail}</p> : null}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1532,7 +1616,8 @@ function PracticeFeedbackPanel({ attempt, onNext, t }) {
         <div className="rounded border border-zinc-700 bg-zinc-950 p-3">
           <span className="text-zinc-500">{t.judgmentWeights}</span>
           <p className="mt-1 text-xs leading-5 text-zinc-300">
-            {t.technicalDimension} {attempt.weights.technical}% · {t.fundamentalDimension} {attempt.weights.fundamental}% · {t.chipDimension} {attempt.weights.chip}% · {t.aiDimension} {attempt.weights.ai}%
+            {t.technicalDimension} {attempt.weights.technical}% · {t.fundamentalDimension} {attempt.weights.fundamental}% · {t.aiDimension} {attempt.weights.ai}%
+            {attempt.weights.chip ? ` · ${t.priceVolumeProxy} ${attempt.weights.chip}%` : ""}
           </p>
         </div>
       </div>
@@ -1617,31 +1702,36 @@ function MarketIndicatorChart({ points, t }) {
     return null;
   }
 
-  const width = 860;
-  const height = 500;
-  const left = 54;
-  const right = 18;
-  const top = 18;
+  const chartPoints = enrichIndicatorPoints(points);
+  const width = 1120;
+  const height = 660;
+  const left = 68;
+  const right = 24;
+  const top = 32;
   const panelGap = 18;
-  const priceHeight = 205;
-  const volumeHeight = 72;
-  const kdHeight = 70;
-  const macdHeight = 78;
+  const priceHeight = 310;
+  const volumeHeight = 82;
+  const kdHeight = 80;
+  const macdHeight = 88;
   const innerWidth = width - left - right;
   const priceTop = top;
   const volumeTop = priceTop + priceHeight + panelGap;
   const kdTop = volumeTop + volumeHeight + panelGap;
   const macdTop = kdTop + kdHeight + panelGap;
-  const xStep = innerWidth / Math.max(points.length - 1, 1);
+  const xStep = innerWidth / Math.max(chartPoints.length - 1, 1);
   const candleWidth = Math.max(4, Math.min(14, xStep * 0.55));
-  const highs = points.map((point) => point.high);
-  const lows = points.map((point) => point.low);
-  const maxPrice = Math.max(...highs);
-  const minPrice = Math.min(...lows);
+  const priceValues = chartPoints
+    .flatMap((point) => [point.high, point.low, point.ma5, point.ma20, point.bb_upper, point.bb_lower])
+    .filter((value) => value != null && !Number.isNaN(Number(value)));
+  const rawMaxPrice = Math.max(...priceValues);
+  const rawMinPrice = Math.min(...priceValues);
+  const rawPriceSpan = rawMaxPrice - rawMinPrice || 1;
+  const maxPrice = rawMaxPrice + rawPriceSpan * 0.04;
+  const minPrice = rawMinPrice - rawPriceSpan * 0.04;
   const priceSpan = maxPrice - minPrice || 1;
-  const maxVolume = Math.max(...points.map((point) => point.volume), 1);
+  const maxVolume = Math.max(...chartPoints.flatMap((point) => [point.volume, point.volume_ma20 || 0]), 1);
   const macdAbs = Math.max(
-    ...points.flatMap((point) => [
+    ...chartPoints.flatMap((point) => [
       Math.abs(point.macd || 0),
       Math.abs(point.macd_signal || 0),
       Math.abs(point.macd_hist || 0),
@@ -1654,31 +1744,46 @@ function MarketIndicatorChart({ points, t }) {
   const yVolume = (value) => volumeTop + volumeHeight - (value / maxVolume) * volumeHeight;
   const yKD = (value) => kdTop + kdHeight - (value / 100) * kdHeight;
   const yMacd = (value) => macdTop + macdHeight / 2 - (value / macdAbs) * (macdHeight / 2);
-  const kPath = linePath(points, (point) => point.k, xAt, yKD);
-  const dPath = linePath(points, (point) => point.d, xAt, yKD);
-  const macdPath = linePath(points, (point) => point.macd, xAt, yMacd);
-  const signalPath = linePath(points, (point) => point.macd_signal, xAt, yMacd);
-  const firstDate = points[0].date;
-  const lastDate = points[points.length - 1].date;
+  const ma5Path = linePath(chartPoints, (point) => point.ma5, xAt, yPrice);
+  const ma20Path = linePath(chartPoints, (point) => point.ma20, xAt, yPrice);
+  const bbUpperPath = linePath(chartPoints, (point) => point.bb_upper, xAt, yPrice);
+  const bbLowerPath = linePath(chartPoints, (point) => point.bb_lower, xAt, yPrice);
+  const bbArea = bandAreaPath(chartPoints, (point) => point.bb_upper, (point) => point.bb_lower, xAt, yPrice);
+  const volumeMA20Path = linePath(chartPoints, (point) => point.volume_ma20, xAt, yVolume);
+  const kPath = linePath(chartPoints, (point) => point.k, xAt, yKD);
+  const dPath = linePath(chartPoints, (point) => point.d, xAt, yKD);
+  const macdPath = linePath(chartPoints, (point) => point.macd, xAt, yMacd);
+  const signalPath = linePath(chartPoints, (point) => point.macd_signal, xAt, yMacd);
+  const firstDate = chartPoints[0].date;
+  const lastDate = chartPoints[chartPoints.length - 1].date;
 
   return (
-    <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
-      <div className="mb-3 flex items-center justify-between text-xs text-zinc-400">
-        <span>{t.technicalChartTitle}</span>
-        <span>{firstDate} → {lastDate}</span>
+    <div className="rounded border border-zinc-800 bg-zinc-950 p-5">
+      <div className="mb-4 flex items-start justify-between gap-6">
+        <div>
+          <p className="text-sm font-semibold text-zinc-100">{t.chartPriceSystem}</p>
+          <p className="mt-1 text-xs text-zinc-500">{firstDate} → {lastDate}</p>
+        </div>
+        <div className="flex flex-wrap justify-end gap-x-4 gap-y-2 text-xs text-zinc-400">
+          <ChartLegendItem color="bg-emerald-300" label={t.chartCandles} />
+          <ChartLegendItem color="bg-amber-300" label="MA5" />
+          <ChartLegendItem color="bg-sky-300" label="MA20" />
+          <ChartLegendItem color="bg-violet-300" label={t.chartBollingerBands} />
+          <ChartLegendItem color="bg-zinc-400" label={t.chartVolumeAverage} />
+        </div>
       </div>
       <svg
-        className="h-[500px] w-full"
+        className="h-[660px] w-full"
         viewBox={`0 0 ${width} ${height}`}
         role="img"
         aria-label={t.technicalChartTitle}
       >
-        <ChartPanelLabel x="10" y={priceTop + 14} label="K" />
-        <ChartPanelLabel x="10" y={volumeTop + 14} label="VOL" />
-        <ChartPanelLabel x="10" y={kdTop + 14} label="KD" />
-        <ChartPanelLabel x="10" y={macdTop + 14} label="MACD" />
+        <ChartPanelLabel x="12" y={priceTop + 16} label="PRICE" />
+        <ChartPanelLabel x="12" y={volumeTop + 16} label="VOL" />
+        <ChartPanelLabel x="12" y={kdTop + 16} label="KD" />
+        <ChartPanelLabel x="12" y={macdTop + 16} label="MACD" />
 
-        {[priceTop, volumeTop, kdTop, macdTop].map((panelTop) => (
+        {[priceTop, priceTop + priceHeight / 2, priceTop + priceHeight, volumeTop, kdTop, macdTop].map((panelTop) => (
           <line
             key={panelTop}
             x1={left}
@@ -1688,24 +1793,29 @@ function MarketIndicatorChart({ points, t }) {
             className="stroke-zinc-800"
           />
         ))}
-        <line x1={left} x2={width - right} y1={priceTop + priceHeight} y2={priceTop + priceHeight} className="stroke-zinc-800" />
         <line x1={left} x2={width - right} y1={volumeTop + volumeHeight} y2={volumeTop + volumeHeight} className="stroke-zinc-800" />
         <line x1={left} x2={width - right} y1={kdTop + kdHeight} y2={kdTop + kdHeight} className="stroke-zinc-800" />
         <line x1={left} x2={width - right} y1={macdTop + macdHeight / 2} y2={macdTop + macdHeight / 2} className="stroke-zinc-700" />
+        <line x1={left} x2={width - right} y1={yKD(80)} y2={yKD(80)} className="stroke-zinc-700" strokeDasharray="4 6" />
+        <line x1={left} x2={width - right} y1={yKD(20)} y2={yKD(20)} className="stroke-zinc-700" strokeDasharray="4 6" />
 
-        <text x={left} y={priceTop + 12} className="fill-zinc-500 text-[11px]">
+        <text x={left} y={priceTop + 14} className="fill-zinc-500 text-[11px]">
           {maxPrice.toFixed(2)}
         </text>
-        <text x={left} y={priceTop + priceHeight - 5} className="fill-zinc-500 text-[11px]">
+        <text x={left} y={priceTop + priceHeight - 7} className="fill-zinc-500 text-[11px]">
           {minPrice.toFixed(2)}
         </text>
-        <text x={left} y={volumeTop + 12} className="fill-zinc-500 text-[11px]">
+        <text x={left} y={volumeTop + 14} className="fill-zinc-500 text-[11px]">
           {formatCompactVolume(maxVolume)}
         </text>
-        <text x={left} y={kdTop + 12} className="fill-zinc-500 text-[11px]">100</text>
-        <text x={left} y={kdTop + kdHeight - 5} className="fill-zinc-500 text-[11px]">0</text>
+        <text x={left} y={kdTop + 14} className="fill-zinc-500 text-[11px]">100</text>
+        <text x={left} y={kdTop + kdHeight - 6} className="fill-zinc-500 text-[11px]">0</text>
 
-        {points.map((point, index) => {
+        {bbArea ? <path d={bbArea} fill="rgba(167, 139, 250, 0.12)" stroke="none" /> : null}
+        {bbUpperPath ? <path d={bbUpperPath} fill="none" stroke="#a78bfa" strokeWidth="1.4" strokeDasharray="6 6" /> : null}
+        {bbLowerPath ? <path d={bbLowerPath} fill="none" stroke="#a78bfa" strokeWidth="1.4" strokeDasharray="6 6" /> : null}
+
+        {chartPoints.map((point, index) => {
           const x = xAt(index);
           const up = point.close >= point.open;
           const candleTop = yPrice(Math.max(point.open, point.close));
@@ -1747,6 +1857,9 @@ function MarketIndicatorChart({ points, t }) {
           );
         })}
 
+        {ma5Path ? <path d={ma5Path} fill="none" className="stroke-amber-300" strokeWidth="2.2" /> : null}
+        {ma20Path ? <path d={ma20Path} fill="none" className="stroke-sky-300" strokeWidth="2.2" /> : null}
+        {volumeMA20Path ? <path d={volumeMA20Path} fill="none" className="stroke-zinc-400" strokeWidth="1.8" /> : null}
         {kPath ? <path d={kPath} fill="none" className="stroke-amber-300" strokeWidth="2" /> : null}
         {dPath ? <path d={dPath} fill="none" className="stroke-sky-300" strokeWidth="2" /> : null}
         {macdPath ? <path d={macdPath} fill="none" className="stroke-emerald-300" strokeWidth="2" /> : null}
@@ -1758,13 +1871,88 @@ function MarketIndicatorChart({ points, t }) {
         <text x={width - right - 82} y={height - 5} className="fill-zinc-500 text-[11px]">
           {lastDate}
         </text>
-        <text x={width - right - 145} y={kdTop + 12} className="fill-amber-300 text-[11px]">K</text>
-        <text x={width - right - 125} y={kdTop + 12} className="fill-sky-300 text-[11px]">D</text>
-        <text x={width - right - 145} y={macdTop + 12} className="fill-emerald-300 text-[11px]">DIF</text>
-        <text x={width - right - 105} y={macdTop + 12} className="fill-red-300 text-[11px]">Signal</text>
+        <text x={width - right - 155} y={priceTop + 14} className="fill-amber-300 text-[11px]">MA5</text>
+        <text x={width - right - 120} y={priceTop + 14} className="fill-sky-300 text-[11px]">MA20</text>
+        <text x={width - right - 78} y={priceTop + 14} className="fill-violet-300 text-[11px]">BB</text>
+        <text x={width - right - 145} y={kdTop + 14} className="fill-amber-300 text-[11px]">K</text>
+        <text x={width - right - 125} y={kdTop + 14} className="fill-sky-300 text-[11px]">D</text>
+        <text x={width - right - 145} y={macdTop + 14} className="fill-emerald-300 text-[11px]">DIF</text>
+        <text x={width - right - 105} y={macdTop + 14} className="fill-red-300 text-[11px]">Signal</text>
       </svg>
     </div>
   );
+}
+
+function ChartLegendItem({ color, label }) {
+  return (
+    <span className="inline-flex items-center gap-2">
+      <span className={`h-2 w-6 ${color}`} />
+      {label}
+    </span>
+  );
+}
+
+function enrichIndicatorPoints(points) {
+  const closes = points.map((point) => Number(point.close));
+  return points.map((point, index) => {
+    const closeWindow5 = closes.slice(Math.max(0, index - 4), index + 1);
+    const closeWindow20 = closes.slice(Math.max(0, index - 19), index + 1);
+    const ma5 = point.ma5 ?? average(closeWindow5);
+    const ma20 = point.ma20 ?? average(closeWindow20);
+    const std20 = stddev(closeWindow20);
+
+    return {
+      ...point,
+      ma5,
+      ma20,
+      bb_middle: point.bb_middle ?? ma20,
+      bb_upper: point.bb_upper ?? ma20 + std20 * 2,
+      bb_lower: point.bb_lower ?? ma20 - std20 * 2,
+      volume_ma20: point.volume_ma20 ?? average(points.slice(Math.max(0, index - 19), index + 1).map((item) => Number(item.volume))),
+    };
+  });
+}
+
+function average(values) {
+  if (!values.length) {
+    return 0;
+  }
+  return values.reduce((total, value) => total + Number(value || 0), 0) / values.length;
+}
+
+function stddev(values) {
+  if (!values.length) {
+    return 0;
+  }
+  const mean = average(values);
+  return Math.sqrt(values.reduce((total, value) => total + (Number(value) - mean) ** 2, 0) / values.length);
+}
+
+function bandAreaPath(points, upperAccessor, lowerAccessor, xAt, yAt) {
+  const upper = points
+    .map((point, index) => {
+      const value = upperAccessor(point);
+      return value == null ? null : [xAt(index), yAt(Number(value))];
+    })
+    .filter(Boolean);
+  const lower = points
+    .map((point, index) => {
+      const value = lowerAccessor(point);
+      return value == null ? null : [xAt(index), yAt(Number(value))];
+    })
+    .filter(Boolean);
+
+  if (!upper.length || upper.length !== lower.length) {
+    return "";
+  }
+
+  const upperPath = upper.map(([x, y], index) => `${index === 0 ? "M" : "L"} ${x.toFixed(2)} ${y.toFixed(2)}`);
+  const lowerPath = lower
+    .slice()
+    .reverse()
+    .map(([x, y]) => `L ${x.toFixed(2)} ${y.toFixed(2)}`);
+
+  return `${upperPath.join(" ")} ${lowerPath.join(" ")} Z`;
 }
 
 function ChartPanelLabel({ x, y, label }) {

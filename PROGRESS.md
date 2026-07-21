@@ -685,3 +685,32 @@
 
 ### 下一步
 - 上傳 MP4 到 YouTube 或 Devpost 可接受的影片平台後，將影片 URL 填入投稿表單。
+
+## 2026-07-21 Practice 刷題版面重設計與布林通道
+
+### 做了什麼
+- 將 Practice 頁改成「先讀題與看圖，最後再作答」的直向刷題流程；`你的判斷` 區塊移到題目、圖表、三面向判讀、多空線索之後。
+- 後端 `MarketIndicatorPoint` 新增 `bb_middle`、`bb_upper`、`bb_lower`，以 20 日均線與 2 倍標準差計算布林通道，並在技術面摘要加入 Bollinger 訊號。
+- 前端技術圖表加大為 660px 高，價格區獨立顯示 K 線、MA5、MA20、布林通道帶狀區；下方分層顯示成交量與量均線、KD、MACD。
+- 三面向判讀改為技術面、基本面、AI 面；籌碼面暫時降級為 `價量 proxy` 輔助觀察，不再列入正式作答權重。
+- 作答權重改為技術面 45%、基本面 25%、AI 面 30%，提交時仍帶 `chip: 0` 以保持後端 schema 與歷史資料相容。
+
+### 關鍵決定
+- 不移除後端與資料庫中的 `chip` 欄位，避免破壞既有紀錄與統計；只在 UI 上弱化籌碼面。
+- 布林通道同時由後端產生、前端可 fallback 計算，讓舊 cached practice question 缺欄位時仍能正常顯示。
+- 作答區不做 sticky，避免使用者未讀完歷史截面就被表單錨定。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m pytest backend\tests\test_practice.py -q`：8 passed，1 warning。
+- `.\.venv\Scripts\python.exe -m pytest -q`（backend）：31 passed，1 warning。
+- `npm.cmd test -- --run`（frontend）：10 passed。
+- `npm.cmd run build`（frontend）：通過。
+- `git diff --check`：無 whitespace error，僅 Windows LF/CRLF 提示。
+- 實機驗證：in-app browser 的 Practice 頁顯示布林通道、MA5/MA20、價量 proxy、三面向判讀；圖表高度為 660px；作答區位於頁面底部。
+
+### 遇到的問題
+- Vite reload 後 SPA 會回首頁，需要重新點擊 `練習` 驗證；非本次改版阻塞。
+- Browser console 保留了一條 HMR 中間狀態的舊錯誤，重新整理後頁面可正常渲染。
+
+### 下一步
+- 若時間允許，可再把 Practice 頁面的隨機題切換做成題目佇列與難度標籤，強化刷題節奏。

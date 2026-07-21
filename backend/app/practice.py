@@ -56,6 +56,9 @@ class MarketIndicatorPoint(BaseModel):
     volume_ma20: float | None = None
     ma5: float | None = None
     ma20: float | None = None
+    bb_middle: float | None = None
+    bb_upper: float | None = None
+    bb_lower: float | None = None
     rsi: float | None = None
     k: float | None = None
     d: float | None = None
@@ -564,6 +567,8 @@ def _indicator_points(rows: list[dict[str, Any]]) -> list[MarketIndicatorPoint]:
         volume_window_20 = volumes[max(0, index - 19) : index + 1]
         close_window_5 = closes[max(0, index - 4) : index + 1]
         close_window_20 = closes[max(0, index - 19) : index + 1]
+        close_ma20 = sum(close_window_20) / len(close_window_20)
+        bb_std = _stddev(close_window_20)
         points.append(
             MarketIndicatorPoint(
                 date=row["date"],
@@ -575,7 +580,10 @@ def _indicator_points(rows: list[dict[str, Any]]) -> list[MarketIndicatorPoint]:
                 volume_ma5=round(sum(volume_window_5) / len(volume_window_5), 2),
                 volume_ma20=round(sum(volume_window_20) / len(volume_window_20), 2),
                 ma5=round(sum(close_window_5) / len(close_window_5), 4),
-                ma20=round(sum(close_window_20) / len(close_window_20), 4),
+                ma20=round(close_ma20, 4),
+                bb_middle=round(close_ma20, 4),
+                bb_upper=round(close_ma20 + bb_std * 2, 4),
+                bb_lower=round(close_ma20 - bb_std * 2, 4),
                 rsi=round(rsi_values[index], 2),
                 k=round(k_values[index], 2),
                 d=round(d_values[index], 2),
@@ -598,6 +606,7 @@ def _technical_snapshot(point: MarketIndicatorPoint, window: list[MarketIndicato
         SnapshotMetric(label="5D return", value=f"{pct5:+.2f}%", tone=_pct_tone(pct5)),
         SnapshotMetric(label="20D return", value=f"{pct20:+.2f}%", tone=_pct_tone(pct20)),
         SnapshotMetric(label="MA5 / MA20", value=f"{point.ma5:.2f} / {point.ma20:.2f}", tone=ma_tone),
+        SnapshotMetric(label="Bollinger", value=_bollinger_position(point), detail="Close location relative to 20D bands.", tone=_bollinger_tone(point)),
         SnapshotMetric(label="RSI14", value=f"{point.rsi:.1f}", detail="Over 70 can be crowded; under 40 can be weak.", tone=rsi_tone),
         SnapshotMetric(label="KD", value=f"K {point.k:.1f} / D {point.d:.1f}", tone="bull" if (point.k or 0) > (point.d or 0) else "bear"),
         SnapshotMetric(label="MACD hist", value=f"{point.macd_hist:+.4f}", tone=macd_tone),
@@ -734,18 +743,20 @@ def _indicator_summary(point: MarketIndicatorPoint, window: list[MarketIndicator
     k_value = _optional_number(point.k, 1)
     d_value = _optional_number(point.d, 1)
     macd_hist = _optional_number(point.macd_hist, 3, signed=True)
+    bb_upper = _optional_number(point.bb_upper)
+    bb_lower = _optional_number(point.bb_lower)
     if zh:
         return [
             f"收盤 {point.close:.2f}，5 日 {pct5:+.2f}%，20 日 {pct20:+.2f}%。",
             f"量能為 20 日均量 {volume_ratio:.2f} 倍。",
             f"MA5/MA20：{ma5} / {ma20}，RSI14：{rsi}。",
-            f"KD：K={k_value} / D={d_value}；MACD Hist={macd_hist}。",
+            f"BB 上/下軌：{bb_upper} / {bb_lower}；KD：K={k_value} / D={d_value}；MACD Hist={macd_hist}。",
         ]
     return [
         f"Close {point.close:.2f}; 5D {pct5:+.2f}%, 20D {pct20:+.2f}%.",
         f"Volume is {volume_ratio:.2f}x the 20D average.",
         f"MA5/MA20: {ma5} / {ma20}; RSI14: {rsi}.",
-        f"KD: K={k_value} / D={d_value}; MACD Hist={macd_hist}.",
+        f"BB upper/lower: {bb_upper} / {bb_lower}; KD: K={k_value} / D={d_value}; MACD Hist={macd_hist}.",
     ]
 
 
@@ -1049,6 +1060,14 @@ def _volatility_values(closes: list[float], period: int) -> list[float]:
     return values
 
 
+def _stddev(values: list[float]) -> float:
+    if not values:
+        return 0.0
+    mean = sum(values) / len(values)
+    variance = sum((value - mean) ** 2 for value in values) / len(values)
+    return math.sqrt(variance)
+
+
 def _window_pct(window: list[MarketIndicatorPoint], days: int) -> float:
     if len(window) <= days:
         return 0.0
@@ -1086,6 +1105,32 @@ def _pct_tone(value: float) -> MetricTone:
     if value > 1:
         return "bull"
     if value < -1:
+        return "bear"
+    return "neutral"
+
+
+def _bollinger_position(point: MarketIndicatorPoint) -> str:
+    if point.bb_upper is None or point.bb_lower is None:
+        return "N/A"
+    if point.close > point.bb_upper:
+        return "Above upper"
+    if point.close < point.bb_lower:
+        return "Below lower"
+    midpoint = ((point.close - point.bb_lower) / max(point.bb_upper - point.bb_lower, 0.0001)) * 100
+    return f"{midpoint:.0f}% band"
+
+
+def _bollinger_tone(point: MarketIndicatorPoint) -> MetricTone:
+    if point.bb_upper is None or point.bb_lower is None:
+        return "neutral"
+    if point.close > point.bb_upper:
+        return "warn"
+    if point.close < point.bb_lower:
+        return "bear"
+    midpoint = ((point.close - point.bb_lower) / max(point.bb_upper - point.bb_lower, 0.0001)) * 100
+    if midpoint > 80:
+        return "warn"
+    if midpoint < 20:
         return "bear"
     return "neutral"
 
