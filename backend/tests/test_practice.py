@@ -1,7 +1,9 @@
+import json
 import sqlite3
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
 from app import practice
@@ -10,6 +12,11 @@ from app.main import app
 
 def _database_file() -> Path:
     return Path("data") / f"test_{uuid4().hex}.db"
+
+
+@pytest.fixture(autouse=True)
+def disable_openai_ai(monkeypatch) -> None:
+    monkeypatch.setattr(practice, "_should_use_openai_ai", lambda: False)
 
 
 def test_practice_dashboard_hides_answers_and_shows_dimensions(monkeypatch) -> None:
@@ -55,6 +62,153 @@ def test_practice_dashboard_falls_back_when_random_generation_fails(monkeypatch)
     assert first_question["ticker"] == "DEMO"
     assert first_question["market_window"]
     assert first_question["ai_snapshot"] is not None
+
+
+def test_ai_snapshot_uses_openai_in_api_mode(monkeypatch) -> None:
+    monkeypatch.setattr(practice, "_should_use_openai_ai", lambda: True)
+    monkeypatch.setattr(practice, "get_openai_model", lambda: "gpt-test")
+    point = practice.MarketIndicatorPoint(
+        date="2026-05-01",
+        open=100,
+        high=105,
+        low=99,
+        close=104,
+        volume=1_200_000,
+        ma5=102,
+        ma20=98,
+        macd_hist=0.4,
+    )
+
+    class FakeResponse:
+        output_text = json.dumps(
+            {
+                "suggested_side": "bull",
+                "confidence": 4,
+                "bull_thesis": "OpenAI bull thesis tied to MA and news evidence.",
+                "bear_thesis": "OpenAI bear thesis flags valuation risk.",
+                "narrative": "Investors may be repricing AI demand.",
+                "hard_to_quantify_factors": ["Positioning", "Management credibility", "Narrative crowding"],
+                "key_uncertainty": "The thesis fails if volume fades.",
+                "checklist": ["Verify source URLs", "Compare MACD", "Check valuation"],
+            }
+        )
+
+    monkeypatch.setattr(practice, "_create_openai_response", lambda **_kwargs: FakeResponse())
+
+    snapshot = practice.build_ai_snapshot(
+        "NVDA",
+        point,
+        [point],
+        [practice.SnapshotMetric(label="MACD hist", value="+0.40", tone="bull")],
+        [practice.SnapshotMetric(label="Trailing PE", value="32.4", tone="neutral")],
+        [practice.SnapshotMetric(label="Recent news", value="AI demand theme", tone="bull")],
+        [],
+        language="en",
+    )
+
+    assert snapshot.source == "openai:gpt-test"
+    assert snapshot.suggested_side == "bull"
+    assert "OpenAI bull thesis" in snapshot.bull_thesis
+
+
+def test_ai_snapshot_falls_back_when_openai_fails(monkeypatch) -> None:
+    monkeypatch.setattr(practice, "_should_use_openai_ai", lambda: True)
+    point = practice.MarketIndicatorPoint(
+        date="2026-05-01",
+        open=100,
+        high=105,
+        low=99,
+        close=104,
+        volume=1_200_000,
+        ma5=102,
+        ma20=98,
+        macd_hist=0.4,
+    )
+
+    def fail_openai(**_kwargs):
+        raise RuntimeError("quota exceeded")
+
+    monkeypatch.setattr(practice, "_create_openai_response", fail_openai)
+
+    snapshot = practice.build_ai_snapshot("NVDA", point, [point], [], [], [], [], language="en")
+
+    assert snapshot.source == "deterministic_ai_coach_fallback"
+    assert snapshot.fallback_reason == "quota exceeded"
+
+
+def test_ai_debate_uses_openai_and_validates_evidence_refs(monkeypatch) -> None:
+    monkeypatch.setattr(practice, "_should_use_openai_ai", lambda: True)
+    monkeypatch.setattr(practice, "get_openai_model", lambda: "gpt-test")
+    evidence = [
+        practice.EvidenceItem(
+            evidence_id="T1",
+            category="technical",
+            title="MACD",
+            value="+0.40",
+            detail="Positive momentum",
+            tone="bull",
+        ),
+        practice.EvidenceItem(
+            evidence_id="F1",
+            category="fundamental",
+            title="Trailing PE",
+            value="32.4",
+            detail="Valuation context",
+            tone="warn",
+        ),
+    ]
+    payload = {
+        "bull": {
+            "side": "bull",
+            "claims": [
+                {"claim_id": "BULL-1", "claim": "Bull 1", "evidence": "Uses T1", "evidence_refs": ["T1"], "source_url": "https://finance.yahoo.com/", "source_name": "Yahoo Finance"},
+                {"claim_id": "BULL-2", "claim": "Bull 2", "evidence": "Uses T1", "evidence_refs": ["T1"], "source_url": "https://finance.yahoo.com/", "source_name": "Yahoo Finance"},
+                {"claim_id": "BULL-3", "claim": "Bull 3", "evidence": "Uses T1", "evidence_refs": ["T1"], "source_url": "https://finance.yahoo.com/", "source_name": "Yahoo Finance"},
+            ],
+        },
+        "bear": {
+            "side": "bear",
+            "claims": [
+                {"claim_id": "BEAR-1", "claim": "Bear 1", "evidence": "Uses F1", "evidence_refs": ["F1"], "source_url": "https://finance.yahoo.com/", "source_name": "Yahoo Finance"},
+                {"claim_id": "BEAR-2", "claim": "Bear 2", "evidence": "Uses F1", "evidence_refs": ["F1"], "source_url": "https://finance.yahoo.com/", "source_name": "Yahoo Finance"},
+                {"claim_id": "BEAR-3", "claim": "Bear 3", "evidence": "Uses F1", "evidence_refs": ["F1"], "source_url": "https://finance.yahoo.com/", "source_name": "Yahoo Finance"},
+            ],
+        },
+        "bull_rebuttals": {
+            "side": "bull",
+            "rebuttals": [
+                {"target_claim_id": "BEAR-1", "rebuttal": "Bull rebuts", "evidence": "Uses T1", "evidence_refs": ["T1"], "source_url": "https://finance.yahoo.com/"},
+                {"target_claim_id": "BEAR-2", "rebuttal": "Bull rebuts", "evidence": "Uses T1", "evidence_refs": ["T1"], "source_url": "https://finance.yahoo.com/"},
+            ],
+        },
+        "bear_rebuttals": {
+            "side": "bear",
+            "rebuttals": [
+                {"target_claim_id": "BULL-1", "rebuttal": "Bear rebuts", "evidence": "Uses F1", "evidence_refs": ["F1"], "source_url": "https://finance.yahoo.com/"},
+                {"target_claim_id": "BULL-2", "rebuttal": "Bear rebuts", "evidence": "Uses F1", "evidence_refs": ["F1"], "source_url": "https://finance.yahoo.com/"},
+            ],
+        },
+        "judge": {
+            "scores": [
+                {"item_id": item_id, "side": "bull" if item_id.startswith("BULL") else "bear", "item_type": "rebuttal" if "REB" in item_id else "claim", "evidence_score": 4, "source_score": 4, "logic_score": 4, "flag": "none", "flag_reason": ""}
+                for item_id in ["BULL-1", "BULL-2", "BULL-3", "BEAR-1", "BEAR-2", "BEAR-3", "BULL-REB-1", "BULL-REB-2", "BEAR-REB-1", "BEAR-REB-2"]
+            ],
+            "bull_total": 1,
+            "bear_total": 1,
+            "summary": "OpenAI debate grounded in supplied evidence.",
+        },
+    }
+
+    class FakeResponse:
+        output_text = json.dumps(payload)
+
+    monkeypatch.setattr(practice, "_create_openai_response", lambda **_kwargs: FakeResponse())
+
+    debate = practice.build_ai_debate("NVDA", evidence, ["bull"], ["bear"], None, False)
+
+    assert debate.source == "openai:gpt-test"
+    assert debate.judge.bull_total == 60
+    assert debate.judge.bear_total == 60
 
 
 def test_practice_attempt_persists_weights_feedback_and_future_results(monkeypatch) -> None:

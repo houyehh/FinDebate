@@ -3,9 +3,10 @@ from datetime import date, timedelta
 from pathlib import Path
 from uuid import uuid4
 
+import pytest
 from fastapi.testclient import TestClient
 
-from app import live_analysis
+from app import live_analysis, practice
 from app.main import app
 from app.market_data import PricePoint, TickerSnapshot
 from app.practice import SnapshotMetric
@@ -13,6 +14,11 @@ from app.practice import SnapshotMetric
 
 def _database_file() -> Path:
     return Path("data") / f"test_{uuid4().hex}.db"
+
+
+@pytest.fixture(autouse=True)
+def disable_openai_ai(monkeypatch) -> None:
+    monkeypatch.setattr(practice, "_should_use_openai_ai", lambda: False)
 
 
 def _rows(count: int = 120) -> list[dict]:

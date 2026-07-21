@@ -2162,7 +2162,7 @@ function EvidenceTabs({ activeTab, setActiveTab, question, t }) {
 
       <div className="mt-4">
         {activeTab === "fundamental" ? (
-          <MetricPanel title={t.fundamentalDimension} metrics={question.fundamental_snapshot || []} />
+          <FundamentalGridPanel metrics={question.fundamental_snapshot || []} t={t} />
         ) : null}
         {activeTab === "news" ? (
           <NewsPanel metrics={question.news_snapshot || []} t={t} />
@@ -2172,6 +2172,121 @@ function EvidenceTabs({ activeTab, setActiveTab, question, t }) {
       </div>
     </div>
   );
+}
+
+function FundamentalGridPanel({ metrics, t }) {
+  if (!metrics?.length) {
+    return <MetricPanel title={t.fundamentalDimension} metrics={[]} />;
+  }
+
+  const groups = groupFundamentalMetrics(metrics, t);
+
+  return (
+    <div className="rounded border border-zinc-800 bg-zinc-950 p-4">
+      <div className="flex items-end justify-between gap-4">
+        <h3 className="font-semibold text-zinc-100">{t.fundamentalDimension}</h3>
+        <p className="text-xs text-zinc-500">{metrics.length} {t.metricCountSuffix}</p>
+      </div>
+      <div className="mt-4 space-y-5">
+        {groups.map((group) => (
+          <section key={group.key}>
+            <h4 className="text-xs font-semibold uppercase tracking-widest text-amber-200">{group.title}</h4>
+            <div className="mt-2 grid grid-cols-4 gap-3">
+              {group.items.map((metric) => (
+                <article key={`${group.key}-${metric.label}`} className="min-h-32 rounded border border-zinc-800 bg-zinc-900 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="text-xs text-zinc-500">{metric.label}</p>
+                    <span className={`shrink-0 text-xs font-semibold ${metricToneClass(metric.tone)}`}>
+                      {metric.value}
+                    </span>
+                  </div>
+                  {metric.detail ? (
+                    <p className="metric-detail-clamp mt-2 text-xs leading-5 text-zinc-400" title={metric.detail}>
+                      {metric.detail}
+                    </p>
+                  ) : null}
+                  {metric.source_url ? (
+                    <a
+                      className="mt-3 inline-block max-w-full truncate text-xs text-amber-200 underline-offset-4 hover:underline"
+                      href={metric.source_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={metric.source_name || metric.source_url}
+                    >
+                      {metric.source_name || metric.source_url}
+                    </a>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function groupFundamentalMetrics(metrics, t) {
+  const groups = [
+    { key: "valuation", title: t.fundamentalValuationGroup, items: [] },
+    { key: "growth", title: t.fundamentalGrowthGroup, items: [] },
+    { key: "health", title: t.fundamentalHealthGroup, items: [] },
+    { key: "context", title: t.fundamentalContextGroup, items: [] },
+  ];
+  const groupMap = Object.fromEntries(groups.map((group) => [group.key, group]));
+
+  metrics.forEach((metric) => {
+    groupMap[fundamentalGroupKey(metric.label)].items.push(metric);
+  });
+
+  return groups.filter((group) => group.items.length);
+}
+
+function fundamentalGroupKey(label) {
+  const normalized = label.toLowerCase();
+  if (
+    normalized.includes("pe") ||
+    normalized.includes("p/e") ||
+    normalized.includes("price/sales") ||
+    normalized.includes("peg") ||
+    normalized.includes("market cap") ||
+    normalized.includes("target") ||
+    normalized.includes("估值") ||
+    normalized.includes("本益") ||
+    normalized.includes("股價營收") ||
+    normalized.includes("peg") ||
+    normalized.includes("市值") ||
+    normalized.includes("目標")
+  ) {
+    return "valuation";
+  }
+  if (
+    normalized.includes("revenue") ||
+    normalized.includes("eps") ||
+    normalized.includes("margin") ||
+    normalized.includes("income") ||
+    normalized.includes("growth") ||
+    normalized.includes("營收") ||
+    normalized.includes("eps") ||
+    normalized.includes("利率") ||
+    normalized.includes("淨利") ||
+    normalized.includes("獲利")
+  ) {
+    return "growth";
+  }
+  if (
+    normalized.includes("debt") ||
+    normalized.includes("current ratio") ||
+    normalized.includes("equity") ||
+    normalized.includes("roe") ||
+    normalized.includes("負債") ||
+    normalized.includes("流動") ||
+    normalized.includes("權益") ||
+    normalized.includes("體質")
+  ) {
+    return "health";
+  }
+  return "context";
 }
 
 function MetricPanel({ title, metrics }) {
@@ -2267,6 +2382,7 @@ function AiSnapshotPanel({ snapshot, t }) {
           <p>{t.aiSuggestedSide}: {sideLabel(snapshot.suggested_side, t)}</p>
           <p>{t.aiConfidence}: {snapshot.confidence}/5</p>
           {snapshot.source ? <p>{t.aiSource}: {snapshot.source}</p> : null}
+          {snapshot.fallback_reason ? <p>{t.fallbackReason}: {snapshot.fallback_reason}</p> : null}
         </div>
       </div>
       <div className="mt-3 space-y-3 text-xs leading-5 text-zinc-300">
@@ -2365,6 +2481,12 @@ function AiDebatePanel({
           <p className="text-sm uppercase text-amber-200">{t.aiDebateKicker}</p>
           <h2 className="mt-2 text-2xl font-semibold">{t.aiDebateTitle}</h2>
           <p className="mt-2 max-w-4xl text-sm leading-6 text-zinc-400">{t.aiDebateLead}</p>
+          {debate.source ? (
+            <p className="mt-2 text-xs text-zinc-500">
+              {t.aiSource}: {debate.source}
+              {debate.fallback_reason ? ` · ${t.fallbackReason}: ${debate.fallback_reason}` : ""}
+            </p>
+          ) : null}
         </div>
         {onStartDebate ? (
           <button
@@ -2460,6 +2582,12 @@ function PracticeFeedbackPanel({ attempt, onNext, t }) {
         {isCorrect ? t.practiceCorrect : t.practiceWrong}
       </h3>
       <p className="mt-4 text-sm leading-6 text-zinc-200">{attempt.feedback.summary}</p>
+      {attempt.feedback.source || attempt.feedback.fallback_reason ? (
+        <p className="mt-3 text-xs leading-5 text-zinc-500">
+          {attempt.feedback.source ? `${t.feedbackSource}: ${attempt.feedback.source}` : ""}
+          {attempt.feedback.fallback_reason ? ` · ${t.fallbackReason}: ${attempt.feedback.fallback_reason}` : ""}
+        </p>
+      ) : null}
       <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-zinc-300">
         <div className="rounded border border-zinc-700 bg-zinc-950 p-3">
           <span className="text-zinc-500">{t.practiceAnswer}</span>

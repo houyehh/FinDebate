@@ -13,6 +13,8 @@ from pydantic import BaseModel, Field
 import yfinance as yf
 
 from app.database import VerdictSide, connect, init_db
+from app.debate import _create_openai_response
+from app.settings import get_debate_mode, get_openai_model
 
 PracticeResult = Literal["correct", "wrong"]
 MetricTone = Literal["bull", "bear", "neutral", "warn"]
@@ -92,6 +94,7 @@ class AiDebate(BaseModel):
     bear_rebuttals: AiDebateRebuttalRound
     judge: AiDebateJudge
     source: str = "evidence_pack_ai_debate"
+    fallback_reason: str = ""
 
 
 class FutureResult(BaseModel):
@@ -112,6 +115,7 @@ class AiSnapshot(BaseModel):
     key_uncertainty: str
     checklist: list[str]
     source: str = "deterministic_ai_coach"
+    fallback_reason: str = ""
 
 
 class MarketIndicatorPoint(BaseModel):
@@ -196,6 +200,8 @@ class PracticeFeedback(BaseModel):
     good_reasoning: list[str] = []
     next_drill_focus: str = ""
     suggested_framework: str = ""
+    source: str = "deterministic_ai_coach"
+    fallback_reason: str = ""
 
 
 class PracticeAttemptRequest(BaseModel):
@@ -267,6 +273,175 @@ class PracticeAttemptNotFoundError(ValueError):
 
 class PracticeValidationError(ValueError):
     pass
+
+
+AI_SNAPSHOT_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "suggested_side": {"type": "string", "enum": ["bull", "bear", "neutral"]},
+        "confidence": {"type": "integer", "minimum": 1, "maximum": 5},
+        "bull_thesis": {"type": "string"},
+        "bear_thesis": {"type": "string"},
+        "narrative": {"type": "string"},
+        "hard_to_quantify_factors": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 5,
+            "items": {"type": "string"},
+        },
+        "key_uncertainty": {"type": "string"},
+        "checklist": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 5,
+            "items": {"type": "string"},
+        },
+    },
+    "required": [
+        "suggested_side",
+        "confidence",
+        "bull_thesis",
+        "bear_thesis",
+        "narrative",
+        "hard_to_quantify_factors",
+        "key_uncertainty",
+        "checklist",
+    ],
+}
+
+
+PRACTICE_FEEDBACK_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "summary": {"type": "string"},
+        "probable_causes": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string"}},
+        "improvement_steps": {"type": "array", "minItems": 1, "maxItems": 5, "items": {"type": "string"}},
+        "focus_tags": {"type": "array", "minItems": 1, "maxItems": 6, "items": {"type": "string"}},
+        "diagnosis": {"type": "string"},
+        "missed_signals": {"type": "array", "maxItems": 4, "items": {"type": "string"}},
+        "good_reasoning": {"type": "array", "maxItems": 4, "items": {"type": "string"}},
+        "next_drill_focus": {"type": "string"},
+        "suggested_framework": {"type": "string"},
+    },
+    "required": [
+        "summary",
+        "probable_causes",
+        "improvement_steps",
+        "focus_tags",
+        "diagnosis",
+        "missed_signals",
+        "good_reasoning",
+        "next_drill_focus",
+        "suggested_framework",
+    ],
+}
+
+
+AI_DEBATE_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "additionalProperties": False,
+    "properties": {
+        "bull": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "side": {"type": "string", "enum": ["bull"]},
+                "claims": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/claim"}},
+            },
+            "required": ["side", "claims"],
+        },
+        "bear": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "side": {"type": "string", "enum": ["bear"]},
+                "claims": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/claim"}},
+            },
+            "required": ["side", "claims"],
+        },
+        "bull_rebuttals": {"$ref": "#/$defs/rebuttal_round"},
+        "bear_rebuttals": {"$ref": "#/$defs/rebuttal_round"},
+        "judge": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "scores": {
+                    "type": "array",
+                    "minItems": 10,
+                    "maxItems": 10,
+                    "items": {"$ref": "#/$defs/score"},
+                },
+                "bull_total": {"type": "integer"},
+                "bear_total": {"type": "integer"},
+                "summary": {"type": "string"},
+            },
+            "required": ["scores", "bull_total", "bear_total", "summary"],
+        },
+    },
+    "required": ["bull", "bear", "bull_rebuttals", "bear_rebuttals", "judge"],
+    "$defs": {
+        "claim": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "claim_id": {"type": "string"},
+                "claim": {"type": "string"},
+                "evidence": {"type": "string"},
+                "evidence_refs": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "string"}},
+                "source_url": {"type": "string"},
+                "source_name": {"type": "string"},
+            },
+            "required": ["claim_id", "claim", "evidence", "evidence_refs", "source_url", "source_name"],
+        },
+        "rebuttal_round": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "side": {"type": "string", "enum": ["bull", "bear"]},
+                "rebuttals": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/rebuttal"}},
+            },
+            "required": ["side", "rebuttals"],
+        },
+        "rebuttal": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "target_claim_id": {"type": "string"},
+                "rebuttal": {"type": "string"},
+                "evidence": {"type": "string"},
+                "evidence_refs": {"type": "array", "minItems": 1, "maxItems": 4, "items": {"type": "string"}},
+                "source_url": {"type": "string"},
+            },
+            "required": ["target_claim_id", "rebuttal", "evidence", "evidence_refs", "source_url"],
+        },
+        "score": {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "item_id": {"type": "string"},
+                "side": {"type": "string", "enum": ["bull", "bear"]},
+                "item_type": {"type": "string", "enum": ["claim", "rebuttal"]},
+                "evidence_score": {"type": "integer", "minimum": 1, "maximum": 5},
+                "source_score": {"type": "integer", "minimum": 1, "maximum": 5},
+                "logic_score": {"type": "integer", "minimum": 1, "maximum": 5},
+                "flag": {"type": "string", "enum": ["none", "unverifiable"]},
+                "flag_reason": {"type": "string"},
+            },
+            "required": [
+                "item_id",
+                "side",
+                "item_type",
+                "evidence_score",
+                "source_score",
+                "logic_score",
+                "flag",
+                "flag_reason",
+            ],
+        },
+    },
+}
 
 
 RANDOM_PRACTICE_TICKERS = [
@@ -511,6 +686,44 @@ def analyze_practice_attempt(
     weights: JudgmentWeights,
     language: str,
 ) -> PracticeFeedback:
+    deterministic = _deterministic_practice_feedback(
+        case=case,
+        selected_side=selected_side,
+        confidence=confidence,
+        rationale=rationale,
+        weights=weights,
+        language=language,
+    )
+    if not _should_use_openai_ai():
+        return deterministic
+
+    try:
+        return _openai_practice_feedback(
+            case=case,
+            selected_side=selected_side,
+            confidence=confidence,
+            rationale=rationale,
+            weights=weights,
+            language=language,
+            baseline=deterministic,
+        )
+    except Exception as exc:
+        return deterministic.model_copy(
+            update={
+                "source": "deterministic_ai_coach_fallback",
+                "fallback_reason": _fallback_reason(exc),
+            }
+        )
+
+
+def _deterministic_practice_feedback(
+    case: PracticeCase,
+    selected_side: VerdictSide,
+    confidence: int,
+    rationale: str,
+    weights: JudgmentWeights,
+    language: str,
+) -> PracticeFeedback:
     zh = language.startswith("zh")
     normalized = rationale.strip().lower()
     result = selected_side == case.answer_side
@@ -623,6 +836,84 @@ def analyze_practice_attempt(
     )
 
 
+def _openai_practice_feedback(
+    case: PracticeCase,
+    selected_side: VerdictSide,
+    confidence: int,
+    rationale: str,
+    weights: JudgmentWeights,
+    language: str,
+    baseline: PracticeFeedback,
+) -> PracticeFeedback:
+    zh = language.startswith("zh")
+    response = _create_openai_response(
+        model=get_openai_model(),
+        input=[
+            {"role": "system", "content": _practice_feedback_system_prompt(language)},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "ticker": case.ticker,
+                        "as_of": case.as_of,
+                        "horizon_days": case.horizon_days,
+                        "visible_prompt": case.prompt_zh if zh and case.prompt_zh else case.prompt,
+                        "selected_side": selected_side,
+                        "confidence": confidence,
+                        "rationale": rationale,
+                        "weights": weights.model_dump(),
+                        "reference_answer": case.answer_side,
+                        "outcome_pct": case.outcome_pct,
+                        "future_results": [item.model_dump(mode="json") for item in case.future_results],
+                        "ai_side_shown_to_user": case.ai_snapshot.suggested_side if case.ai_snapshot else None,
+                        "visible_evidence": _feedback_visible_evidence(case, language),
+                        "baseline_rule_feedback": baseline.model_dump(mode="json"),
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "practice_feedback",
+                "schema": PRACTICE_FEEDBACK_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+    feedback = PracticeFeedback.model_validate(json.loads(response.output_text))
+    return feedback.model_copy(update={"source": _openai_source(), "fallback_reason": ""})
+
+
+def _practice_feedback_system_prompt(language: str) -> str:
+    output_language = "Traditional Chinese" if language.startswith("zh") else "English"
+    return (
+        "You are an investment decision training coach, not an investment adviser. "
+        "Give feedback only on the user's reasoning quality for this completed historical drill. "
+        "Use the user's rationale, confidence, dimension weights, visible evidence, and the realized backtest result. "
+        "Do not give generic canned advice. Name the specific blind spot, good reasoning, and next practice focus. "
+        "Never invent evidence outside the visible_evidence payload. "
+        f"Write all user-facing text in {output_language}. Return only JSON matching the schema."
+    )
+
+
+def _feedback_visible_evidence(case: PracticeCase, language: str) -> dict[str, Any]:
+    zh = language.startswith("zh")
+    technical = localized_snapshot_metrics(case.technical_snapshot, language)
+    fundamental = localized_snapshot_metrics(case.fundamental_snapshot, language)
+    news = localized_snapshot_metrics(case.news_snapshot, language)
+    chip = localized_snapshot_metrics(case.chip_snapshot, language)
+    return {
+        "technical": [_metric_prompt_item(metric) for metric in technical[:8]],
+        "fundamental": [_metric_prompt_item(metric) for metric in fundamental[:10]],
+        "news": [_metric_prompt_item(metric) for metric in news[:6]],
+        "price_volume": [_metric_prompt_item(metric) for metric in chip[:4]],
+        "ai_snapshot": case.ai_snapshot.model_dump(mode="json") if case.ai_snapshot else None,
+        "answer_explanation": case.answer_explanation_zh if zh else case.answer_explanation_en,
+    }
+
+
 def _case_from_points(
     ticker: str,
     points: list[MarketIndicatorPoint],
@@ -642,7 +933,17 @@ def _case_from_points(
     fundamental_snapshot = _fundamental_snapshot(ticker, as_of=selected.date) if use_live_fundamentals else _demo_fundamental_snapshot(ticker)
     news_snapshot = _news_snapshot(ticker, as_of=selected.date) if use_live_fundamentals else _demo_news_snapshot(ticker, as_of=selected.date)
     chip_snapshot = _chip_snapshot(selected, window)
-    ai_snapshot = _ai_snapshot(ticker, selected, window, technical_snapshot, fundamental_snapshot, chip_snapshot)
+    ai_snapshot = build_ai_snapshot(
+        ticker,
+        selected,
+        window,
+        technical_snapshot,
+        fundamental_snapshot,
+        news_snapshot,
+        chip_snapshot,
+        language=language,
+        allow_openai=use_live_fundamentals,
+    )
     bull_points, bear_points = _factor_clues(selected, window, ai_snapshot, False)
     bull_points_zh, bear_points_zh = _factor_clues(selected, window, ai_snapshot, True)
     evidence_pack = build_evidence_pack(
@@ -661,6 +962,7 @@ def _case_from_points(
         bear_points_zh if language.startswith("zh") else bear_points,
         ai_snapshot,
         language.startswith("zh"),
+        allow_openai=use_live_fundamentals,
     )
     question_id = f"history-{ticker}-{selected.date}-{horizon}d-{random.randint(1000, 9999)}"
     currency = _currency_for_ticker(ticker)
@@ -1225,6 +1527,97 @@ def _chip_snapshot(point: MarketIndicatorPoint, window: list[MarketIndicatorPoin
     ]
 
 
+def build_ai_snapshot(
+    ticker: str,
+    point: MarketIndicatorPoint,
+    window: list[MarketIndicatorPoint],
+    technical: list[SnapshotMetric],
+    fundamental: list[SnapshotMetric],
+    news: list[SnapshotMetric],
+    chip: list[SnapshotMetric],
+    language: str,
+    allow_openai: bool = True,
+) -> AiSnapshot:
+    deterministic = _ai_snapshot(ticker, point, window, technical, fundamental, chip)
+    deterministic = _ai_for_language(ticker, point, window, deterministic, language)
+    if not allow_openai or not _should_use_openai_ai():
+        return deterministic
+
+    try:
+        return _openai_ai_snapshot(
+            ticker=ticker,
+            point=point,
+            window=window,
+            technical=technical,
+            fundamental=fundamental,
+            news=news,
+            chip=chip,
+            language=language,
+        )
+    except Exception as exc:
+        return deterministic.model_copy(
+            update={
+                "source": "deterministic_ai_coach_fallback",
+                "fallback_reason": _fallback_reason(exc),
+            }
+        )
+
+
+def _openai_ai_snapshot(
+    ticker: str,
+    point: MarketIndicatorPoint,
+    window: list[MarketIndicatorPoint],
+    technical: list[SnapshotMetric],
+    fundamental: list[SnapshotMetric],
+    news: list[SnapshotMetric],
+    chip: list[SnapshotMetric],
+    language: str,
+) -> AiSnapshot:
+    response = _create_openai_response(
+        model=get_openai_model(),
+        input=[
+            {"role": "system", "content": _ai_snapshot_system_prompt(language)},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "ticker": ticker,
+                        "as_of": point.date,
+                        "price": point.close,
+                        "recent_market_window": [item.model_dump(mode="json") for item in window[-12:]],
+                        "technical": [_metric_prompt_item(item) for item in technical],
+                        "fundamental": [_metric_prompt_item(item) for item in fundamental[:12]],
+                        "news": [_metric_prompt_item(item) for item in news[:6]],
+                        "price_volume": [_metric_prompt_item(item) for item in chip],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "ai_investment_snapshot",
+                "schema": AI_SNAPSHOT_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+    snapshot = AiSnapshot.model_validate(json.loads(response.output_text))
+    return snapshot.model_copy(update={"source": _openai_source(), "fallback_reason": ""})
+
+
+def _ai_snapshot_system_prompt(language: str) -> str:
+    output_language = "Traditional Chinese" if language.startswith("zh") else "English"
+    return (
+        "You are the AI dimension of an investment decision training workbench. "
+        "Use only the provided technical, fundamental, news/theme, and price-volume evidence. "
+        "Your job is to produce a falsifiable thesis, human/narrative factors, and a checklist for the user. "
+        "Do not present a trade order or guaranteed forecast. Do not invent data or cite facts outside the payload. "
+        f"Write all user-facing text in {output_language}. Return only JSON matching the schema."
+    )
+
+
 def _ai_snapshot(
     ticker: str,
     point: MarketIndicatorPoint,
@@ -1273,7 +1666,7 @@ def localized_ai_snapshot(
     snapshot: AiSnapshot,
     language: str,
 ) -> AiSnapshot:
-    if not language.startswith("zh"):
+    if not language.startswith("zh") or snapshot.source.startswith("openai:"):
         return snapshot
 
     pct20 = _window_pct(window, 20)
@@ -1305,7 +1698,48 @@ def localized_ai_snapshot(
             "哪一個證據出現會讓 AI 論點失效？",
         ],
         source=snapshot.source,
+        fallback_reason=snapshot.fallback_reason,
     )
+
+
+def _ai_for_language(
+    ticker: str,
+    point: MarketIndicatorPoint,
+    window: list[MarketIndicatorPoint],
+    snapshot: AiSnapshot,
+    language: str,
+) -> AiSnapshot:
+    return localized_ai_snapshot(ticker, point, window, snapshot, language)
+
+
+def _should_use_openai_ai() -> bool:
+    return get_debate_mode() == "api"
+
+
+def _openai_source() -> str:
+    return f"openai:{get_openai_model()}"
+
+
+def _fallback_reason(exc: Exception) -> str:
+    message = str(exc).strip()
+    return (message or exc.__class__.__name__)[:240]
+
+
+def _metric_prompt_item(metric: SnapshotMetric | EvidenceItem) -> dict[str, Any]:
+    if isinstance(metric, SnapshotMetric):
+        detail = metric.summary or metric.detail
+        label = metric.label
+    else:
+        detail = metric.detail
+        label = metric.title
+    return {
+        "label": label,
+        "value": metric.value,
+        "detail": detail,
+        "tone": metric.tone,
+        "source_name": metric.source_name,
+        "source_url": metric.source_url,
+    }
 
 
 METRIC_LABEL_ZH = {
@@ -1499,6 +1933,30 @@ def build_ai_debate(
     bear_points: list[str],
     ai: AiSnapshot | None,
     zh: bool,
+    allow_openai: bool = True,
+) -> AiDebate:
+    deterministic = _deterministic_ai_debate(ticker, evidence_pack, bull_points, bear_points, ai, zh)
+    if not allow_openai or not _should_use_openai_ai():
+        return deterministic
+
+    try:
+        return _openai_ai_debate(ticker, evidence_pack, bull_points, bear_points, ai, zh)
+    except Exception as exc:
+        return deterministic.model_copy(
+            update={
+                "source": "evidence_pack_ai_debate_fallback",
+                "fallback_reason": _fallback_reason(exc),
+            }
+        )
+
+
+def _deterministic_ai_debate(
+    ticker: str,
+    evidence_pack: list[EvidenceItem],
+    bull_points: list[str],
+    bear_points: list[str],
+    ai: AiSnapshot | None,
+    zh: bool,
 ) -> AiDebate:
     bull_refs = _pick_evidence_refs(evidence_pack, {"bull"}, fallback_tones={"neutral"})
     bear_refs = _pick_evidence_refs(evidence_pack, {"bear", "warn"}, fallback_tones={"neutral"})
@@ -1557,6 +2015,118 @@ def build_ai_debate(
         bear_rebuttals=bear_rebuttals,
         judge=AiDebateJudge(scores=scores, bull_total=bull_total, bear_total=bear_total, summary=summary),
     )
+
+
+def _openai_ai_debate(
+    ticker: str,
+    evidence_pack: list[EvidenceItem],
+    bull_points: list[str],
+    bear_points: list[str],
+    ai: AiSnapshot | None,
+    zh: bool,
+) -> AiDebate:
+    language = "zh-Hant" if zh else "en"
+    response = _create_openai_response(
+        model=get_openai_model(),
+        input=[
+            {"role": "system", "content": _ai_debate_system_prompt(language)},
+            {
+                "role": "user",
+                "content": json.dumps(
+                    {
+                        "ticker": ticker,
+                        "evidence_pack": [item.model_dump(mode="json") for item in evidence_pack],
+                        "bull_seed_points": bull_points,
+                        "bear_seed_points": bear_points,
+                        "ai_snapshot": ai.model_dump(mode="json") if ai else None,
+                        "claim_ids": {"bull": ["BULL-1", "BULL-2", "BULL-3"], "bear": ["BEAR-1", "BEAR-2", "BEAR-3"]},
+                        "rebuttal_ids": ["BULL-REB-1", "BULL-REB-2", "BEAR-REB-1", "BEAR-REB-2"],
+                    },
+                    ensure_ascii=False,
+                ),
+            },
+        ],
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "evidence_pack_ai_debate",
+                "schema": AI_DEBATE_SCHEMA,
+                "strict": True,
+            }
+        },
+    )
+    debate = AiDebate.model_validate(json.loads(response.output_text))
+    _validate_ai_debate(debate, evidence_pack)
+    scores = debate.judge.scores
+    bull_total = sum(score.evidence_score + score.source_score + score.logic_score for score in scores if score.side == "bull")
+    bear_total = sum(score.evidence_score + score.source_score + score.logic_score for score in scores if score.side == "bear")
+    return debate.model_copy(
+        update={
+            "judge": debate.judge.model_copy(update={"bull_total": bull_total, "bear_total": bear_total}),
+            "source": _openai_source(),
+            "fallback_reason": "",
+        }
+    )
+
+
+def _ai_debate_system_prompt(language: str) -> str:
+    output_language = "Traditional Chinese" if language.startswith("zh") else "English"
+    return (
+        "You generate a compact bull-vs-bear debate for an investment decision training workbench. "
+        "Use only the supplied evidence_pack and AI snapshot; do not browse and do not invent new facts. "
+        "Produce exactly three bull opening claims, three bear opening claims, two bull rebuttals, two bear rebuttals, "
+        "and judge scores for the ten items. Every claim and rebuttal must cite evidence_refs from the evidence_pack. "
+        "The judge evaluates evidence quality and logic only; do not make a buy/sell recommendation. "
+        f"Write all user-facing text in {output_language}. Return only JSON matching the schema."
+    )
+
+
+def _validate_ai_debate(debate: AiDebate, evidence_pack: list[EvidenceItem]) -> None:
+    valid_refs = {item.evidence_id for item in evidence_pack}
+    expected_scores = {
+        "BULL-1",
+        "BULL-2",
+        "BULL-3",
+        "BEAR-1",
+        "BEAR-2",
+        "BEAR-3",
+        "BULL-REB-1",
+        "BULL-REB-2",
+        "BEAR-REB-1",
+        "BEAR-REB-2",
+    }
+    actual_scores = {score.item_id for score in debate.judge.scores}
+    if actual_scores != expected_scores:
+        raise ValueError("AI debate judge scores must cover every debate item exactly once.")
+    if debate.bull_rebuttals.side != "bull" or debate.bear_rebuttals.side != "bear":
+        raise ValueError("AI debate rebuttal rounds must use the matching side.")
+
+    expected_claim_ids = {
+        "bull": ["BULL-1", "BULL-2", "BULL-3"],
+        "bear": ["BEAR-1", "BEAR-2", "BEAR-3"],
+    }
+    for side, round_ in [("bull", debate.bull), ("bear", debate.bear)]:
+        claim_ids = [claim.claim_id for claim in round_.claims]
+        if claim_ids != expected_claim_ids[side]:
+            raise ValueError(f"AI debate {side} claims must use fixed claim ids.")
+        for claim in round_.claims:
+            _validate_evidence_refs(claim.evidence_refs, valid_refs)
+
+    bull_targets = {claim.claim_id for claim in debate.bull.claims}
+    bear_targets = {claim.claim_id for claim in debate.bear.claims}
+    for round_, valid_targets in [(debate.bull_rebuttals, bear_targets), (debate.bear_rebuttals, bull_targets)]:
+        for rebuttal in round_.rebuttals:
+            if rebuttal.target_claim_id not in valid_targets:
+                raise ValueError("AI debate rebuttal targets must point to opponent opening claims.")
+            _validate_evidence_refs(rebuttal.evidence_refs, valid_refs)
+
+
+def _validate_evidence_refs(refs: list[str], valid_refs: set[str]) -> None:
+    if not refs:
+        raise ValueError("AI debate items must cite at least one evidence ref.")
+    invalid = [ref for ref in refs if ref not in valid_refs]
+    if invalid:
+        raise ValueError(f"Unknown evidence refs: {invalid}")
 
 
 def _metric_evidence_items(
@@ -1870,14 +2440,18 @@ def _public_question(case: PracticeCase, language: str) -> PracticeQuestion:
         zh=zh,
     )
     data["evidence_pack"] = [item.model_dump(mode="json") for item in evidence_pack]
-    data["ai_debate"] = build_ai_debate(
-        case.ticker,
-        evidence_pack,
-        data.get("bull_points", case.bull_points),
-        data.get("bear_points", case.bear_points),
-        public_ai,
-        zh,
-    ).model_dump(mode="json")
+    if case.ai_debate and case.ai_debate.source != "evidence_pack_ai_debate":
+        data["ai_debate"] = case.ai_debate.model_dump(mode="json")
+    else:
+        data["ai_debate"] = build_ai_debate(
+            case.ticker,
+            evidence_pack,
+            data.get("bull_points", case.bull_points),
+            data.get("bear_points", case.bear_points),
+            public_ai,
+            zh,
+            allow_openai=False,
+        ).model_dump(mode="json")
     return PracticeQuestion(**data)
 
 

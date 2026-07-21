@@ -1,5 +1,34 @@
 # 開發進度
 
+## 2026-07-21 AI 面 GPT-first 與基本面 grid
+
+### 做了什麼
+- Practice / Live 工作台的 `AI 面` 改成 API mode 預設優先呼叫 OpenAI，以 JSON schema 產生建議方向、信心度、多空 thesis、敘事/人為因素、檢查清單。
+- 工作台內的 AI Debate 改成 API mode 優先由 OpenAI 根據 evidence pack 產出多空開場、反駁與裁判分數；若 schema、quota、auth、model access 或其他 provider 錯誤失敗，會自動降級為原本 deterministic evidence-pack debate。
+- Practice 作答後的教練回饋改成 GPT-first：GPT 會拿到使用者方向、信心、理由、權重、正解、實際回測結果、可見證據與原本規則診斷，生成針對本題作答的個人化回饋；失敗時降級為 deterministic coach。
+- 新增 `source` 與 `fallback_reason` 欄位，前端在 AI 面、AI Debate、教練回饋區會顯示目前內容來自 `openai:<model>`、`deterministic_ai_coach` 或 fallback。
+- 基本面面板改為分組 grid，分成估值、成長/獲利、財務體質、業務/資料脈絡；長說明改兩行截斷並保留 hover title 與來源連結。
+
+### 關鍵決定
+- `OPENAI_DEBATE_MODE=api` 現在代表 AI 工作台功能也會 GPT-first；`demo` 則完全不呼叫 OpenAI。
+- 歷史題的 OpenAI AI 面只吃 as-of 前可見資料；作答前不把未來結果交給模型，避免未來資訊洩漏。
+- 測試環境固定關閉 OpenAI 呼叫，並用 mock 測 GPT path / fallback path，避免因真實 quota 或網路造成測試不穩。
+
+### 驗收測試
+- `.\.venv\Scripts\python.exe -m py_compile backend\app\practice.py backend\app\live_analysis.py`：通過。
+- `.\.venv\Scripts\python.exe -m pytest backend\tests -q`：40 passed，1 個既有 Starlette/httpx deprecation warning。
+- `npm.cmd test -- --run`：13 passed。
+- `npm.cmd run build`：通過。
+- `git diff --check`：無 whitespace error；僅 Windows LF/CRLF 提示。
+
+### 遇到問題
+- 需要避免 static practice bank 在 module import 時打 OpenAI，因此 demo bank 與重新公開題目不重複呼叫 GPT；動態題生成和 live analysis 才會在 API mode 嘗試 GPT。
+- Live analysis 測試原本 patch 錯模組名稱，已改為 patch `practice._should_use_openai_ai`。
+
+### 下一步
+- 若評審或你貼入可用 API key 後，可以用畫面上的 `source` 直接確認 AI 面是否由 OpenAI 產生。
+- 若 OpenAI structured output 對大型 AI Debate schema 有 provider-side 限制，可再把 AI Debate schema 拆成多段呼叫以降低失敗率。
+
 ## 2026-07-21 皇宮視覺外殼套用
 
 ### 做了什麼

@@ -135,4 +135,11 @@ body {
     font-family: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
     font-variant-numeric: tabular-nums;
   }
+
+  .metric-detail-clamp {
+    display: -webkit-box;
+    overflow: hidden;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+  }
 }
